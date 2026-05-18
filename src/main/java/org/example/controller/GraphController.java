@@ -13,53 +13,12 @@ public class GraphController {
     private final MainFrame view;
     private final GraphLayoutGenerator layoutGenerator;
 
-    private boolean isUpdatingCombo = false; // guard to prevent listener loop on zoom combo
-
     public GraphController(MainFrame view, GraphLayoutGenerator layoutGenerator) {
         this.view = view;
         this.layoutGenerator = layoutGenerator;
 
         view.getOpenTextItem().addActionListener(this::openTextFile);
         view.getExportItem().addActionListener(e -> JOptionPane.showMessageDialog(view, "Funkcja eksportu w budowie."));
-
-        view.getToolPanel().getZoomComboBox().addActionListener(e -> {
-            if (isUpdatingCombo) return;
-            Object selected = view.getToolPanel().getZoomComboBox().getSelectedItem();
-            if (selected != null) {
-                try {
-                    String val = selected.toString().replace("%", "").trim();
-                    double zoomVal = Double.parseDouble(val) / 100.0;
-                    view.getGraphPanel().setZoom(zoomVal);
-                } catch (NumberFormatException ignored) {
-                }
-            }
-        });
-
-        view.getToolPanel().getResetViewButton().addActionListener(e -> {
-            view.getGraphPanel().resetView();
-            view.getGraphPanel().repaint();
-        });
-
-        view.getGraphPanel().setZoomChangeListener(() -> {
-            int zoomPct = (int) Math.round(view.getGraphPanel().getZoom() * 100);
-            isUpdatingCombo = true;
-            view.getToolPanel().getZoomComboBox().setSelectedItem(zoomPct + "%");
-            isUpdatingCombo = false;
-        });
-
-        view.getGraphPanel().setPanChangeListener(() -> {
-            int px = (int) view.getGraphPanel().getPanX();
-            int py = (int) view.getGraphPanel().getPanY();
-            view.getToolPanel().getPositionLabel().setText(String.format("(%d, %d)", px, py));
-        });
-
-        view.getToolPanel().getShowLabelsToggle().addActionListener(e -> {
-            view.getGraphPanel().setShowLabels(view.getToolPanel().getShowLabelsToggle().isSelected());
-        });
-
-        view.getToolPanel().getShowWeightsToggle().addActionListener(e -> {
-            view.getGraphPanel().setShowWeights(view.getToolPanel().getShowWeightsToggle().isSelected());
-        });
     }
 
     private void openTextFile(ActionEvent e) {
@@ -96,11 +55,12 @@ public class GraphController {
                     try {
                         graph = get();
                         view.getGraphPanel().setGraph(graph);
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(view, "Błąd podczas generowania układu: " + ex.getCause().getMessage(), "Błąd", JOptionPane.ERROR_MESSAGE);
-                        ex.printStackTrace();
-                    } finally {
                         view.getToolPanel().setControlsEnabled(true);
+                    } catch (Exception ex) {
+                        Throwable cause = ex.getCause();
+                        String errorMsg = cause != null && cause.getMessage() != null ? cause.getMessage() : ex.getMessage();
+                        JOptionPane.showMessageDialog(view, "Błąd podczas generowania układu: " + errorMsg, "Błąd", JOptionPane.ERROR_MESSAGE);
+                        ex.printStackTrace();
                     }
                 }
             };

@@ -11,6 +11,9 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 
 public class GraphPanel extends JPanel {
+    private static final int BASE_NODE_RADIUS = 10;
+    private static final int MIN_NODE_RADIUS = 5;
+
     private Graph graph;
     private double zoom = 1.0;
     private double panX = 0.0;
@@ -25,6 +28,10 @@ public class GraphPanel extends JPanel {
     private double baseScale = 1.0;
     private double baseOffsetX = 0.0;
     private double baseOffsetY = 0.0;
+
+    private int getScaledNodeRadius() {
+        return (int) Math.max(MIN_NODE_RADIUS, BASE_NODE_RADIUS * zoom);
+    }
 
     public GraphPanel() {
         setBackground(Color.WHITE);
@@ -43,7 +50,7 @@ public class GraphPanel extends JPanel {
                 for (Vertex v : graph.getVertices()) {
                     int vx = convertToScreenX(v.getX());
                     int vy = convertToScreenY(v.getY());
-                    if (Math.hypot(vx - e.getX(), vy - e.getY()) <= 10) {
+                    if (Math.hypot(vx - e.getX(), vy - e.getY()) <= getScaledNodeRadius()) {
                         draggedVertex = v;
                         break;
                     }
@@ -118,7 +125,7 @@ public class GraphPanel extends JPanel {
                 for (Vertex v : graph.getVertices()) {
                     int vx = convertToScreenX(v.getX());
                     int vy = convertToScreenY(v.getY());
-                    if (Math.hypot(vx - e.getX(), vy - e.getY()) <= 10) {
+                    if (Math.hypot(vx - e.getX(), vy - e.getY()) <= getScaledNodeRadius()) {
                         found = v;
                         break;
                     }
@@ -172,7 +179,6 @@ public class GraphPanel extends JPanel {
         this.zoom = 1.0;
         this.panX = 0;
         this.panY = 0;
-        calculateBaseScaleAndOffset();
         if (zoomChangeListener != null) zoomChangeListener.run();
         if (panChangeListener != null) panChangeListener.run();
     }
@@ -295,7 +301,7 @@ public class GraphPanel extends JPanel {
 
         // Vertices
         g2d.setColor(Color.BLUE);
-        int radius = 10;
+        int radius = getScaledNodeRadius();
         for (Vertex v : graph.getVertices()) {
             int x = convertToScreenX(v.getX());
             int y = convertToScreenY(v.getY());
