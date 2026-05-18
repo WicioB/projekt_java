@@ -95,7 +95,6 @@ public class GraphController {
                 protected void done() {
                     try {
                         graph = get();
-                        graph.printGraph();
                         view.getGraphPanel().setGraph(graph);
                     } catch (Exception ex) {
                         JOptionPane.showMessageDialog(view, "Błąd podczas generowania układu: " + ex.getCause().getMessage(), "Błąd", JOptionPane.ERROR_MESSAGE);
