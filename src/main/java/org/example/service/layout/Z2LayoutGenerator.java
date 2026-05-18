@@ -44,7 +44,6 @@ public class Z2LayoutGenerator implements GraphLayoutGenerator {
 
     private void invokeExternalProgram(File exeFile, File edgesFile, File outFile, int algorithm) throws Exception {
         String algoString = (algorithm == 1) ? "fruchterman" : "tutte";
-        System.out.println(edgesFile.getAbsolutePath());
         ProcessBuilder pb = new ProcessBuilder(
                 exeFile.getAbsolutePath(),
                 "-i", edgesFile.getAbsolutePath(),

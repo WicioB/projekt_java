@@ -16,7 +16,6 @@ public class MainFrame extends JFrame {
         setSize(1000, 700);
         setLocationRelativeTo(null);
 
-        // Menu
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("Plik");
         openTextItem = new JMenuItem("Otwórz (.txt)");
@@ -30,13 +29,12 @@ public class MainFrame extends JFrame {
         menuBar.add(saveMenu);
         setJMenuBar(menuBar);
 
-        // Panels
         graphPanel = new GraphPanel();
         toolPanel = new ToolPanel();
 
         setLayout(new BorderLayout());
         add(graphPanel, BorderLayout.CENTER);
-        add(toolPanel, BorderLayout.EAST);
+        add(toolPanel, BorderLayout.SOUTH);
     }
 
     public GraphPanel getGraphPanel() {
