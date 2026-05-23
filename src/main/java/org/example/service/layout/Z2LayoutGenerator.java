@@ -13,11 +13,9 @@ public class Z2LayoutGenerator implements GraphLayoutGenerator {
 
     private File extractExecutable() throws Exception {
         String os = System.getProperty("os.name").toLowerCase();
-        if (os.contains("win")) {
-            throw new UnsupportedOperationException("Program generujący układ grafu jest dostępny tylko dla systemu Linux");
-        }
-        String resourcePath = "/main";
-        String suffix = "";
+        boolean isWin = os.contains("win");
+        String resourcePath = isWin ? "/main.exe" : "/main";
+        String suffix = isWin ? ".exe" : "";
 
         File tempExe = File.createTempFile("graph_layout_cmd", suffix);
         tempExe.deleteOnExit();
