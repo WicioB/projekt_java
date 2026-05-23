@@ -1,8 +1,9 @@
 package org.example.view;
 
-import org.example.model.graph.Edge;
 import org.example.model.graph.Graph;
 import org.example.model.graph.Vertex;
+import org.example.service.render.GraphRenderer;
+import org.example.service.render.ViewportMetrics;
 
 import javax.swing.*;
 import java.awt.*;
@@ -172,6 +173,7 @@ public class GraphPanel extends JPanel {
     public void setGraph(Graph graph) {
         this.graph = graph;
         resetView();
+        calculateBaseScaleAndOffset();
         repaint();
     }
 
@@ -232,42 +234,19 @@ public class GraphPanel extends JPanel {
     }
 
     private void calculateBaseScaleAndOffset() {
-        if (graph == null || graph.getVertices().isEmpty()) return;
-
-        int insets = 50;
-        int width = getWidth() - 2 * insets;
-        int height = getHeight() - 2 * insets;
-        if(width <= 0) width = 1;
-        if(height <= 0) height = 1;
-
-        double minX = Double.MAX_VALUE;
-        double minY = Double.MAX_VALUE;
-        double maxX = -Double.MAX_VALUE;
-        double maxY = -Double.MAX_VALUE;
-
-        for (Vertex v : graph.getVertices()) {
-            if (v.getX() < minX) minX = v.getX();
-            if (v.getY() < minY) minY = v.getY();
-            if (v.getX() > maxX) maxX = v.getX();
-            if (v.getY() > maxY) maxY = v.getY();
-        }
-
-        double scaleX = (maxX == minX) ? 1 : width / (maxX - minX);
-        double scaleY = (maxY == minY) ? 1 : height / (maxY - minY);
-        baseScale = Math.min(scaleX, scaleY);
-
-        baseOffsetX = (getWidth() - (maxX - minX) * baseScale) / 2 - minX * baseScale;
-        baseOffsetY = (getHeight() - (maxY - minY) * baseScale) / 2 - minY * baseScale;
+        ViewportMetrics metrics = ViewportMetrics.calculate(graph, getWidth(), getHeight(), 50);
+        this.baseScale = metrics.getBaseScale();
+        this.baseOffsetX = metrics.getBaseOffsetX();
+        this.baseOffsetY = metrics.getBaseOffsetY();
     }
 
     private int convertToScreenX(double x) {
-        return (int) ((x * baseScale + baseOffsetX) * zoom + panX);
+        return GraphRenderer.convertToScreen(x, baseScale, baseOffsetX, zoom, panX);
     }
 
     private int convertToScreenY(double y) {
-        return (int) ((y * baseScale + baseOffsetY) * zoom + panY);
+        return GraphRenderer.convertToScreen(y, baseScale, baseOffsetY, zoom, panY);
     }
-
 
     @Override
     protected void paintComponent(Graphics g) {
@@ -277,48 +256,9 @@ public class GraphPanel extends JPanel {
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // Edges
-        g2d.setColor(Color.BLACK);
-        for (Edge edge : graph.getAllEdges()) {
-            Vertex s = edge.getSource();
-            Vertex t = edge.getTarget();
-
-            int x1 = convertToScreenX(s.getX());
-            int y1 = convertToScreenY(s.getY());
-            int x2 = convertToScreenX(t.getX());
-            int y2 = convertToScreenY(t.getY());
-
-            g2d.drawLine(x1, y1, x2, y2);
-
-            if (showWeights && edge.getWeight() != null) {
-                int midX = (x1 + x2) / 2;
-                int midY = (y1 + y2) / 2;
-                g2d.setColor(Color.RED);
-                g2d.drawString(String.format("%.2f", edge.getWeight()), midX, midY);
-                g2d.setColor(Color.BLACK);
-            }
-        }
-
-        // Vertices
-        g2d.setColor(Color.BLUE);
-        int radius = getScaledNodeRadius();
-        for (Vertex v : graph.getVertices()) {
-            int x = convertToScreenX(v.getX());
-            int y = convertToScreenY(v.getY());
-            if (v == draggedVertex) {
-                g2d.setColor(Color.ORANGE);
-            } else if (v == hoveredVertex) {
-                g2d.setColor(Color.CYAN);
-            } else {
-                g2d.setColor(Color.BLUE);
-            }
-            g2d.fillOval(x - radius, y - radius, radius * 2, radius * 2);
-
-            // Labels
-            if (showLabels) {
-                g2d.setColor(Color.BLACK);
-                g2d.drawString(String.valueOf(v.getId()), x + radius, y - radius);
-            }
-        }
+        GraphRenderer.render(g2d, graph, showLabels, showWeights,
+                             baseScale, baseOffsetX, baseOffsetY,
+                             zoom, panX, panY, getScaledNodeRadius(),
+                             draggedVertex, hoveredVertex);
     }
 }
