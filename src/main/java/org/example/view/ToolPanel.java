@@ -19,7 +19,6 @@ public class ToolPanel extends JPanel {
 
         JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
 
-        // Display options / Toggles
         showLabelsToggle = new JToggleButton();
         showLabelsToggle.setIcon(new SvgIcon("/icons/label.svg", 20, 20));
         showLabelsToggle.setToolTipText("Przełącz widoczność etykiet");
@@ -52,7 +51,7 @@ public class ToolPanel extends JPanel {
         rightPanel.add(zoomComboBox);
 
         positionLabel = new JLabel("(0, 0)");
-        positionLabel.setPreferredSize(new Dimension(80, 20));;
+        positionLabel.setPreferredSize(new Dimension(80, 20));
         positionLabel.setHorizontalAlignment(SwingConstants.CENTER);
         rightPanel.add(positionLabel);
 

@@ -3,9 +3,9 @@ package org.example.model.graph;
 public class Edge {
     private Vertex source;
     private Vertex target;
-    private Double weight;
+    private double weight;
 
-    public Edge(Vertex source, Vertex target, Double weight) {
+    public Edge(Vertex source, Vertex target, double weight) {
         this.source = source;
         this.target = target;
         this.weight = weight;
@@ -27,7 +27,7 @@ public class Edge {
         this.target = target;
     }
 
-    public Double getWeight() {
+    public double getWeight() {
         return weight;
     }
 

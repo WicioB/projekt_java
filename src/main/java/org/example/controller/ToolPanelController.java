@@ -2,6 +2,8 @@ package org.example.controller;
 
 import org.example.view.MainFrame;
 
+import java.util.Locale;
+
 public class ToolPanelController {
     private final MainFrame view;
     private boolean isUpdatingCombo = false;
@@ -38,17 +40,28 @@ public class ToolPanelController {
         });
 
         view.getGraphPanel().setPanChangeListener(() -> {
-            int px = (int) view.getGraphPanel().getPanX();
-            int py = (int) view.getGraphPanel().getPanY();
-            view.getToolPanel().getPositionLabel().setText(String.format("(%d, %d)", px, py));
+            double gx = view.getGraphPanel().getViewCenterGraphX();
+            double gy = view.getGraphPanel().getViewCenterGraphY();
+            view.getToolPanel().getPositionLabel().setText(formatGraphCoordinates(gx, gy));
         });
 
-        view.getToolPanel().getShowLabelsToggle().addActionListener(e -> {
+        view.getToolPanel().getShowLabelsToggle().addActionListener(_ -> {
             view.getGraphPanel().setShowLabels(view.getToolPanel().getShowLabelsToggle().isSelected());
         });
 
-        view.getToolPanel().getShowWeightsToggle().addActionListener(e -> {
+        view.getToolPanel().getShowWeightsToggle().addActionListener(_ -> {
             view.getGraphPanel().setShowWeights(view.getToolPanel().getShowWeightsToggle().isSelected());
         });
+    }
+
+    private static String formatGraphCoordinates(double x, double y) {
+        return String.format("(%s, %s)", formatGraphCoordinate(x), formatGraphCoordinate(y));
+    }
+
+    private static String formatGraphCoordinate(double value) {
+        if (Math.abs(value - Math.rint(value)) < 1e-6) {
+            return String.format(Locale.ROOT, "%d", (long) Math.rint(value));
+        }
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 }

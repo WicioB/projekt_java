@@ -1,16 +1,17 @@
 package org.example.view;
 
-import org.example.service.export.ExportOptions;
+import org.example.service.export.VisualExportOptions;
+import org.example.service.render.viewport.ViewportMetrics;
 
 import javax.swing.*;
 import java.awt.*;
 
 public class ExportOptionsDialog {
 
-    public static ExportOptions showAndGetOptions(Component parentComponent) {
+    public static VisualExportOptions showAndGetOptions(Component parent, boolean initialShowLabels, boolean initialShowWeights) {
         JPanel panel = new JPanel(new GridLayout(0, 1));
-        JCheckBox showLabelsCb = new JCheckBox("Dołącz etykiety wierzchołków", true);
-        JCheckBox showWeightsCb = new JCheckBox("Dołącz wagi krawędzi", true);
+        JCheckBox showLabelsCb = new JCheckBox("Dołącz etykiety wierzchołków", initialShowLabels);
+        JCheckBox showWeightsCb = new JCheckBox("Dołącz wagi krawędzi", initialShowWeights);
 
         JPanel sizePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JComboBox<String> sizeCombo = new JComboBox<>(new String[]{"800x600", "1024x768", "1280x720", "1920x1080", "Własny"});
@@ -36,9 +37,9 @@ public class ExportOptionsDialog {
         panel.add(showWeightsCb);
         panel.add(sizePanel);
 
-        int result = JOptionPane.showConfirmDialog(parentComponent, panel, "Opcje eksportu", JOptionPane.OK_CANCEL_OPTION);
+        int result = JOptionPane.showConfirmDialog(parent, panel, "Opcje eksportu", JOptionPane.OK_CANCEL_OPTION);
         if (result != JOptionPane.OK_OPTION) {
-            return null; // Anulowano
+            return null;
         }
 
         int width = 800;
@@ -49,7 +50,7 @@ public class ExportOptionsDialog {
                 width = Integer.parseInt(widthField.getText().trim());
                 height = Integer.parseInt(heightField.getText().trim());
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(parentComponent, "Nieprawidłowy rozmiar własny, użyto domyślnego 800x600.");
+                JOptionPane.showMessageDialog(parent, "Nieprawidłowy rozmiar własny, użyto domyślnego 800x600.");
             }
         } else {
             String[] parts = selectedSize.split("x");
@@ -57,6 +58,12 @@ public class ExportOptionsDialog {
             height = Integer.parseInt(parts[1]);
         }
 
-        return new ExportOptions(showLabelsCb.isSelected(), showWeightsCb.isSelected(), width, height, 50);
+        return new VisualExportOptions(
+                showLabelsCb.isSelected(),
+                showWeightsCb.isSelected(),
+                width,
+                height,
+                ViewportMetrics.DEFAULT_INSETS
+        );
     }
 }

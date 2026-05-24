@@ -3,9 +3,7 @@ package org.example.service.layout;
 import org.example.model.graph.Graph;
 import org.example.model.graph.Vertex;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.util.Locale;
 import java.util.Scanner;
 
@@ -64,8 +62,8 @@ public class Z2LayoutGenerator implements GraphLayoutGenerator {
                 if ((exitCode & (1 << 5)) != 0) errorMsg.append("Przekazano nieznaną opcję. ");
                 if ((exitCode & (1 << 6)) != 0) errorMsg.append("Plik wejściowy nie został znaleziony. ");
 
-                if (errorMsg.length() > 0) {
-                    throw new RuntimeException("Błąd programu (kod " + exitCode + "): " + errorMsg.toString());
+                if (!errorMsg.isEmpty()) {
+                    throw new RuntimeException("Błąd programu (kod " + exitCode + "): " + errorMsg);
                 }
             }
         } finally {

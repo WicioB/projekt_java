@@ -1,30 +1,10 @@
-package org.example.service.render;
+package org.example.service.render.viewport;
 
 import org.example.model.graph.Graph;
 import org.example.model.graph.Vertex;
 
-public class ViewportMetrics {
-    private final double baseScale;
-    private final double baseOffsetX;
-    private final double baseOffsetY;
-
-    public ViewportMetrics(double baseScale, double baseOffsetX, double baseOffsetY) {
-        this.baseScale = baseScale;
-        this.baseOffsetX = baseOffsetX;
-        this.baseOffsetY = baseOffsetY;
-    }
-
-    public double getBaseScale() {
-        return baseScale;
-    }
-
-    public double getBaseOffsetX() {
-        return baseOffsetX;
-    }
-
-    public double getBaseOffsetY() {
-        return baseOffsetY;
-    }
+public record ViewportMetrics(double baseScale, double baseOffsetX, double baseOffsetY) {
+    public static final int DEFAULT_INSETS = 50;
 
     public static ViewportMetrics calculate(Graph graph, int width, int height, int insets) {
         if (graph == null || graph.getVertices().isEmpty()) {
@@ -53,7 +33,7 @@ public class ViewportMetrics {
         double baseScale = Math.min(scaleX, scaleY);
 
         double baseOffsetX = (width - (maxX - minX) * baseScale) / 2.0 - minX * baseScale;
-        double baseOffsetY = (height - (maxY - minY) * baseScale) / 2.0 - minY * baseScale;
+        double baseOffsetY = height / 2.0 + (minY + maxY) / 2.0 * baseScale;
 
         return new ViewportMetrics(baseScale, baseOffsetX, baseOffsetY);
     }
