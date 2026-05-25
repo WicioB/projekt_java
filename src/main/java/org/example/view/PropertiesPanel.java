@@ -2,6 +2,10 @@ package org.example.view;
 
 import org.example.model.graph.Edge;
 import org.example.model.graph.Vertex;
+import org.example.view.interaction.EmptyHighlight;
+import org.example.view.interaction.EdgeHighlight;
+import org.example.view.interaction.GraphHighlight;
+import org.example.view.interaction.VerticesHighlight;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -27,6 +31,7 @@ public class PropertiesPanel extends JPanel {
 
     private final JButton toggleButton;
     private final JPanel contentPanel;
+    private final JLabel emptyLabel;
 
     private boolean expanded;
     private boolean updatingFields;
@@ -54,7 +59,7 @@ public class PropertiesPanel extends JPanel {
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
         contentPanel.add(titleLabel, BorderLayout.NORTH);
 
-        JLabel emptyLabel = new JLabel("Wybierz wierzchołek lub krawędź", SwingConstants.CENTER);
+        emptyLabel = new JLabel("Wybierz wierzchołek lub krawędź", SwingConstants.CENTER);
         emptyLabel.setForeground(Color.GRAY);
 
         vertexIdField = createReadOnlyField();
@@ -76,7 +81,7 @@ public class PropertiesPanel extends JPanel {
 
         wireFieldListeners();
         setExpanded(false);
-        showEmpty();
+        showHighlight(GraphHighlight.empty());
         setControlsEnabled(false);
     }
 
@@ -221,15 +226,14 @@ public class PropertiesPanel extends JPanel {
         });
     }
 
-    private Vertex currentVertex;
-    private Edge currentEdge;
+    private GraphHighlight currentHighlight = GraphHighlight.empty();
 
     private Vertex currentVertex() {
-        return currentVertex;
+        return currentHighlight.soleVertex();
     }
 
     private Edge currentEdge() {
-        return currentEdge;
+        return currentHighlight.selectedEdge();
     }
 
     public void setVertexChangeListener(BiConsumer<Vertex, double[]> listener) {
@@ -240,15 +244,29 @@ public class PropertiesPanel extends JPanel {
         this.edgeWeightChangeListener = listener;
     }
 
-    public void showEmpty() {
-        currentVertex = null;
-        currentEdge = null;
+    public void showHighlight(GraphHighlight highlight) {
+        currentHighlight = highlight;
+        switch (highlight) {
+            case EdgeHighlight edgeHighlight -> showEdgeForm(edgeHighlight.edge());
+            case VerticesHighlight verticesHighlight when verticesHighlight.vertices().size() == 1 ->
+                    showVertexForm(verticesHighlight.vertices().iterator().next());
+            case VerticesHighlight verticesHighlight ->
+                    showMultiVertexForm(verticesHighlight.vertices().size());
+            case EmptyHighlight _ -> showEmptyForm();
+        }
+    }
+
+    private void showEmptyForm() {
+        emptyLabel.setText("Wybierz wierzchołek lub krawędź");
         cardLayout.show(formCardPanel, "empty");
     }
 
-    public void showVertex(Vertex vertex) {
-        currentVertex = vertex;
-        currentEdge = null;
+    private void showMultiVertexForm(int count) {
+        emptyLabel.setText("Wybrano wierzchołków: " + count);
+        cardLayout.show(formCardPanel, "empty");
+    }
+
+    private void showVertexForm(Vertex vertex) {
         updatingFields = true;
         vertexIdField.setText(String.valueOf(vertex.getId()));
         vertexXSpinner.setValue(vertex.getX());
@@ -257,25 +275,13 @@ public class PropertiesPanel extends JPanel {
         cardLayout.show(formCardPanel, "vertex");
     }
 
-    public void showEdge(Edge edge) {
-        currentEdge = edge;
-        currentVertex = null;
+    private void showEdgeForm(Edge edge) {
         updatingFields = true;
         edgeSourceField.setText(String.valueOf(edge.getSource().getId()));
         edgeTargetField.setText(String.valueOf(edge.getTarget().getId()));
         edgeWeightSpinner.setValue(edge.getWeight());
         updatingFields = false;
         cardLayout.show(formCardPanel, "edge");
-    }
-
-    public void refreshCurrentSelection() {
-        if (currentVertex != null) {
-            showVertex(currentVertex);
-        } else if (currentEdge != null) {
-            showEdge(currentEdge);
-        } else {
-            showEmpty();
-        }
     }
 
     public void setExpanded(boolean expanded) {
@@ -294,23 +300,13 @@ public class PropertiesPanel extends JPanel {
         }
     }
 
-    public void expand() {
-        if (!expanded) {
-            setExpanded(true);
-        }
-    }
-
-    public boolean isExpanded() {
-        return expanded;
-    }
-
     public void setControlsEnabled(boolean enabled) {
         vertexXSpinner.setEnabled(enabled);
         vertexYSpinner.setEnabled(enabled);
         edgeWeightSpinner.setEnabled(enabled);
         toggleButton.setEnabled(enabled);
         if (!enabled) {
-            showEmpty();
+            showHighlight(GraphHighlight.empty());
         }
     }
 

@@ -19,6 +19,8 @@ public final class SceneStyle {
     public static final Color EDGE_SELECTED_COLOR = new Color(255, 120, 0);
     public static final Color WEIGHT_COLOR = Color.RED;
     public static final Color LABEL_COLOR = Color.BLACK;
+    public static final Color SELECTION_BOX_FILL_COLOR = new Color(0, 120, 215, 50);
+    public static final Color SELECTION_BOX_BORDER_COLOR = new Color(0, 120, 215);
 
     private SceneStyle() {}
 

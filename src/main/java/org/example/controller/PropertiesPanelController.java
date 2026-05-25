@@ -15,15 +15,9 @@ public class PropertiesPanelController {
     }
 
     private void initListeners() {
-        view.getGraphPanel().setSelectionChangeListener(selection -> {
-            if (selection.vertex() != null) {
-                view.getPropertiesPanel().showVertex(selection.vertex());
-            } else if (selection.edge() != null) {
-                view.getPropertiesPanel().showEdge(selection.edge());
-            } else {
-                view.getPropertiesPanel().showEmpty();
-            }
-        });
+        view.getGraphPanel().setSelectionChangeListener(
+                highlight -> view.getPropertiesPanel().showHighlight(highlight)
+        );
 
         view.getPropertiesPanel().setVertexChangeListener(this::applyVertexChange);
         view.getPropertiesPanel().setEdgeWeightChangeListener(this::applyEdgeWeightChange);
@@ -44,7 +38,6 @@ public class PropertiesPanelController {
 
     public void clearSelection() {
         view.getGraphPanel().clearSelection();
-        view.getPropertiesPanel().showEmpty();
     }
 
     public void setControlsEnabled(boolean enabled) {

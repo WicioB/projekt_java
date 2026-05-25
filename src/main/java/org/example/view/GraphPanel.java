@@ -8,6 +8,8 @@ import org.example.service.render.scene.*;
 import org.example.service.render.viewport.RenderContext;
 import org.example.service.render.viewport.Viewport;
 import org.example.service.render.viewport.ViewportMetrics;
+import org.example.view.interaction.GraphHighlight;
+import org.example.view.interaction.SelectionBox;
 
 import javax.swing.*;
 import java.awt.*;
@@ -16,6 +18,9 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.function.Consumer;
 
 public class GraphPanel extends JPanel {
     private static final int MIN_NODE_RADIUS = 5;
@@ -26,11 +31,12 @@ public class GraphPanel extends JPanel {
     private boolean loading;
     private Viewport viewport = Viewport.defaults();
 
-    private Vertex draggedVertex = null;
-    private Vertex hoveredVertex = null;
-    private Edge hoveredEdge = null;
-    private Vertex selectedVertex = null;
-    private Edge selectedEdge = null;
+    private Set<Vertex> dragVertices = Set.of();
+    private GraphHighlight hover = GraphHighlight.empty();
+    private GraphHighlight selection = GraphHighlight.empty();
+    private final SelectionBox selectionBox = new SelectionBox();
+    private Vertex rightPressVertex;
+    private boolean rightButtonActive;
     private boolean vertexDragged;
     private boolean pointerMoved;
 
@@ -46,16 +52,26 @@ public class GraphPanel extends JPanel {
     }
 
     private void clearInteractionState() {
-        draggedVertex = null;
-        hoveredVertex = null;
-        hoveredEdge = null;
+        dragVertices = Set.of();
+        hover = GraphHighlight.empty();
+        selectionBox.clear();
+        rightPressVertex = null;
+        rightButtonActive = false;
         vertexDragged = false;
         pointerMoved = false;
         setCursor(Cursor.getDefaultCursor());
     }
 
+    private static boolean isRightMouseButton(MouseEvent e) {
+        return SwingUtilities.isRightMouseButton(e) || e.getButton() == MouseEvent.BUTTON3;
+    }
+
+    private static boolean isLeftMouseButton(MouseEvent e) {
+        return SwingUtilities.isLeftMouseButton(e) || e.getButton() == MouseEvent.BUTTON1;
+    }
+
     private void updateHoverCursor() {
-        if (draggedVertex != null || hoveredVertex != null || hoveredEdge != null) {
+        if (!dragVertices.isEmpty() || hover.isInteractive()) {
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         } else {
             setCursor(Cursor.getDefaultCursor());
@@ -65,43 +81,73 @@ public class GraphPanel extends JPanel {
     private void updateHoverTarget(int screenX, int screenY) {
         Vertex foundVertex = vertexAt(screenX, screenY);
         Edge foundEdge = foundVertex == null ? edgeAt(screenX, screenY) : null;
-        if (foundVertex != hoveredVertex || foundEdge != hoveredEdge) {
-            hoveredVertex = foundVertex;
-            hoveredEdge = foundEdge;
+        GraphHighlight found = GraphHighlight.fromPointer(foundVertex, foundEdge);
+        if (!highlightsEqual(hover, found)) {
+            hover = found;
             updateHoverCursor();
             repaint();
         }
     }
 
+    private static boolean highlightsEqual(GraphHighlight a, GraphHighlight b) {
+        if (a.isEmpty() && b.isEmpty()) {
+            return true;
+        }
+        if (a.isEmpty() || b.isEmpty()) {
+            return false;
+        }
+        return a.selectedVertices().equals(b.selectedVertices())
+                && a.selectedEdge() == b.selectedEdge();
+    }
+
     public void clearSelection() {
-        selectedVertex = null;
-        selectedEdge = null;
+        applySelection(GraphHighlight.empty());
+    }
+
+    private void applySelection(GraphHighlight newSelection) {
+        selection = newSelection;
         if (selectionChangeListener != null) {
-            selectionChangeListener.accept(GraphSelection.empty());
+            selectionChangeListener.accept(selection);
         }
         repaint();
     }
 
     private void selectVertex(Vertex vertex) {
-        selectedVertex = vertex;
-        selectedEdge = null;
-        if (selectionChangeListener != null) {
-            selectionChangeListener.accept(GraphSelection.vertex(vertex));
-        }
-        repaint();
+        applySelection(GraphHighlight.vertex(vertex));
     }
 
     private void selectEdge(Edge edge) {
-        selectedEdge = edge;
-        selectedVertex = null;
-        if (selectionChangeListener != null) {
-            selectionChangeListener.accept(GraphSelection.edge(edge));
+        applySelection(GraphHighlight.edge(edge));
+    }
+
+    private void toggleVertexInSelection(Vertex vertex) {
+        applySelection(selection.toggleVertex(vertex));
+    }
+
+    private void addVertexToSelection(Vertex vertex) {
+        LinkedHashSet<Vertex> combined = new LinkedHashSet<>(selection.selectedVertices());
+        combined.add(vertex);
+        applySelection(GraphHighlight.vertices(combined));
+    }
+
+    private void applyVertexSelection(Set<Vertex> picked, boolean additive) {
+        if (picked.isEmpty()) {
+            if (!additive) {
+                clearSelection();
+            }
+            return;
         }
-        repaint();
+        LinkedHashSet<Vertex> combined = new LinkedHashSet<>();
+        if (additive) {
+            combined.addAll(selection.selectedVertices());
+        }
+        combined.addAll(picked);
+        applySelection(GraphHighlight.vertices(combined));
     }
 
     public GraphPanel() {
         setBackground(Color.WHITE);
+        setFocusable(true);
 
         addComponentListener(new ComponentAdapter() {
             @Override
@@ -120,13 +166,29 @@ public class GraphPanel extends JPanel {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (cantInteract()) return;
+                requestFocusInWindow();
                 lastMouseX = e.getX();
                 lastMouseY = e.getY();
                 pointerMoved = false;
 
-                draggedVertex = vertexAt(e.getX(), e.getY());
+                if (isRightMouseButton(e)) {
+                    beginRightButtonInteraction(e);
+                    return;
+                }
+                if (!isLeftMouseButton(e)) {
+                    return;
+                }
 
-                if (draggedVertex == null) {
+                Vertex hit = vertexAt(e.getX(), e.getY());
+                if (hit != null && selection.containsVertex(hit)) {
+                    dragVertices = new LinkedHashSet<>(selection.selectedVertices());
+                } else if (hit != null) {
+                    dragVertices = Set.of(hit);
+                } else {
+                    dragVertices = Set.of();
+                }
+
+                if (dragVertices.isEmpty()) {
                     setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                 } else {
                     setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -136,11 +198,23 @@ public class GraphPanel extends JPanel {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (cantInteract()) return;
+                if (isRightMouseButton(e) || e.isPopupTrigger() || rightButtonActive) {
+                    finishRightButtonInteraction(e);
+                    return;
+                }
+                if (!isLeftMouseButton(e)) {
+                    return;
+                }
                 if (vertexDragged && graphModifiedListener != null) {
                     graphModifiedListener.run();
                 }
-                if (draggedVertex != null) {
-                    selectVertex(draggedVertex);
+                if (!dragVertices.isEmpty() && vertexDragged) {
+                    if (dragVertices.size() == 1) {
+                        Vertex dragged = dragVertices.iterator().next();
+                        if (!selection.containsVertex(dragged)) {
+                            selectVertex(dragged);
+                        }
+                    }
                 } else if (!pointerMoved) {
                     Vertex clickedVertex = vertexAt(e.getX(), e.getY());
                     if (clickedVertex != null) {
@@ -154,7 +228,7 @@ public class GraphPanel extends JPanel {
                         }
                     }
                 }
-                draggedVertex = null;
+                dragVertices = Set.of();
                 vertexDragged = false;
                 updateHoverCursor();
                 repaint();
@@ -164,12 +238,28 @@ public class GraphPanel extends JPanel {
             public void mouseDragged(MouseEvent e) {
                 if (cantInteract()) return;
                 pointerMoved = true;
+
+                if (rightButtonActive || isRightMouseButton(e)) {
+                    if (selectionBox.isActive()) {
+                        selectionBox.update(e.getX(), e.getY());
+                        repaint();
+                    }
+                    return;
+                }
+                if (!isLeftMouseButton(e)) {
+                    return;
+                }
+
                 int dx = e.getX() - lastMouseX;
                 int dy = e.getY() - lastMouseY;
-                if (draggedVertex != null) {
+                if (!dragVertices.isEmpty()) {
                     vertexDragged = true;
-                    draggedVertex.setX(draggedVertex.getX() + viewport.screenDeltaToGraphX(dx));
-                    draggedVertex.setY(draggedVertex.getY() + viewport.screenDeltaToGraphY(dy));
+                    double graphDx = viewport.screenDeltaToGraphX(dx);
+                    double graphDy = viewport.screenDeltaToGraphY(dy);
+                    for (Vertex vertex : dragVertices) {
+                        vertex.setX(vertex.getX() + graphDx);
+                        vertex.setY(vertex.getY() + graphDy);
+                    }
 
                     lastMouseX = e.getX();
                     lastMouseY = e.getY();
@@ -206,10 +296,9 @@ public class GraphPanel extends JPanel {
 
             @Override
             public void mouseExited(MouseEvent e) {
-                if (hoveredVertex != null || hoveredEdge != null) {
-                    hoveredVertex = null;
-                    hoveredEdge = null;
-                    if (draggedVertex == null) {
+                if (!hover.isEmpty()) {
+                    hover = GraphHighlight.empty();
+                    if (dragVertices.isEmpty()) {
                         setCursor(Cursor.getDefaultCursor());
                     }
                     repaint();
@@ -221,26 +310,61 @@ public class GraphPanel extends JPanel {
         addMouseWheelListener(mouseAdapter);
     }
 
-    private Runnable panChangeListener;
-    private Runnable zoomChangeListener;
-    private Runnable graphModifiedListener;
-    private java.util.function.Consumer<GraphSelection> selectionChangeListener;
-
-    public record GraphSelection(Vertex vertex, Edge edge) {
-        public static GraphSelection empty() {
-            return new GraphSelection(null, null);
-        }
-
-        public static GraphSelection vertex(Vertex vertex) {
-            return new GraphSelection(vertex, null);
-        }
-
-        public static GraphSelection edge(Edge edge) {
-            return new GraphSelection(null, edge);
+    private void beginRightButtonInteraction(MouseEvent e) {
+        rightButtonActive = true;
+        rightPressVertex = vertexAt(e.getX(), e.getY());
+        if (rightPressVertex == null) {
+            selectionBox.begin(e.getX(), e.getY());
+            setCursor(Cursor.getDefaultCursor());
+        } else {
+            selectionBox.clear();
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         }
     }
 
-    public void setSelectionChangeListener(java.util.function.Consumer<GraphSelection> listener) {
+    private void finishRightButtonInteraction(MouseEvent e) {
+        boolean additive = e.isShiftDown();
+        if (selectionBox.isSignificantDrag()) {
+            applyVertexSelection(verticesInScreenRect(selectionBox.screenBounds()), additive);
+        } else if (rightPressVertex != null && !pointerMoved) {
+            if (additive) {
+                addVertexToSelection(rightPressVertex);
+            } else {
+                toggleVertexInSelection(rightPressVertex);
+            }
+        }
+
+        selectionBox.clear();
+        rightPressVertex = null;
+        rightButtonActive = false;
+        dragVertices = Set.of();
+        vertexDragged = false;
+        updateHoverCursor();
+        repaint();
+    }
+
+    private Set<Vertex> verticesInScreenRect(Rectangle screenRect) {
+        if (graph == null || screenRect.width <= 0 && screenRect.height <= 0) {
+            return Set.of();
+        }
+        RenderContext ctx = currentRenderContext();
+        LinkedHashSet<Vertex> picked = new LinkedHashSet<>();
+        for (Vertex vertex : graph.getVertices()) {
+            int vx = ctx.toScreenX(vertex.getX());
+            int vy = ctx.toScreenY(vertex.getY());
+            if (screenRect.contains(vx, vy)) {
+                picked.add(vertex);
+            }
+        }
+        return picked;
+    }
+
+    private Runnable panChangeListener;
+    private Runnable zoomChangeListener;
+    private Runnable graphModifiedListener;
+    private Consumer<GraphHighlight> selectionChangeListener;
+
+    public void setSelectionChangeListener(Consumer<GraphHighlight> listener) {
         this.selectionChangeListener = listener;
     }
 
@@ -267,10 +391,9 @@ public class GraphPanel extends JPanel {
     public void setGraph(Graph graph) {
         this.graph = graph;
         clearInteractionState();
-        selectedVertex = null;
-        selectedEdge = null;
+        selection = GraphHighlight.empty();
         if (selectionChangeListener != null) {
-            selectionChangeListener.accept(GraphSelection.empty());
+            selectionChangeListener.accept(GraphHighlight.empty());
         }
         if (graph != null) {
             applyResetView();
@@ -418,27 +541,27 @@ public class GraphPanel extends JPanel {
     }
 
     private VertexDrawStyle vertexDrawStyle(Vertex vertex) {
-        if (vertex == draggedVertex) {
+        if (dragVertices.contains(vertex)) {
             return VertexDrawStyle.fill(SceneStyle.VERTEX_DRAG_COLOR);
         }
-        if (vertex == selectedVertex) {
+        if (selection.containsVertex(vertex)) {
             return VertexDrawStyle.withBorder(
                     SceneStyle.VERTEX_FILL_COLOR,
                     SceneStyle.VERTEX_SELECTED_BORDER_COLOR,
                     SceneStyle.SELECTED_VERTEX_BORDER_WIDTH
             );
         }
-        if (vertex == hoveredVertex) {
+        if (hover.containsVertex(vertex)) {
             return VertexDrawStyle.fill(SceneStyle.VERTEX_HOVER_COLOR);
         }
         return VertexDrawStyle.DEFAULT;
     }
 
     private EdgeDrawStyle edgeDrawStyle(Edge edge) {
-        if (edge == selectedEdge) {
+        if (selection.containsEdge(edge)) {
             return new EdgeDrawStyle(SceneStyle.EDGE_SELECTED_COLOR, SceneStyle.HIGHLIGHT_STROKE_WIDTH);
         }
-        if (edge == hoveredEdge) {
+        if (hover.containsEdge(edge)) {
             return new EdgeDrawStyle(SceneStyle.EDGE_HOVER_COLOR, SceneStyle.HIGHLIGHT_STROKE_WIDTH);
         }
         return EdgeDrawStyle.DEFAULT;
@@ -452,5 +575,6 @@ public class GraphPanel extends JPanel {
         Graphics2D g2d = (Graphics2D) g;
         GraphScene scene = GraphRenderer.buildScene(graph, currentRenderContext(), this::vertexDrawStyle, this::edgeDrawStyle);
         GraphRenderer.render(g2d, scene);
+        selectionBox.draw(g2d);
     }
 }
