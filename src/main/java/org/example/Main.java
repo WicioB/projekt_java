@@ -1,6 +1,6 @@
 package org.example;
 
-import org.example.controller.GraphController;
+import org.example.controller.DocumentController;
 import org.example.controller.ToolPanelController;
 import org.example.service.layout.GraphLayoutGenerator;
 import org.example.service.layout.Z2LayoutGenerator;
@@ -14,7 +14,7 @@ public class Main {
             GraphLayoutGenerator layoutGenerator = new Z2LayoutGenerator();
 
             MainFrame mainFrame = new MainFrame();
-            new GraphController(mainFrame, layoutGenerator);
+            new DocumentController(mainFrame, layoutGenerator);
             new ToolPanelController(mainFrame);
 
             mainFrame.setVisible(true);

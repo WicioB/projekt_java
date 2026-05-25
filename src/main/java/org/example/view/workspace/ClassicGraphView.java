@@ -12,20 +12,12 @@ import java.util.function.Consumer;
 public class ClassicGraphView extends JPanel implements GraphView {
     private final GraphPanel panel = new GraphPanel();
     private final GraphPanelView activeView;
-    private Runnable modifiedListener;
     private final List<Consumer<ActiveGraphView>> activeViewChangeListeners = new ArrayList<>();
 
     public ClassicGraphView() {
         setLayout(new BorderLayout());
         add(panel, BorderLayout.CENTER);
         activeView = new GraphPanelView(panel, PaneSide.NONE);
-        panel.setGraphModifiedListener(this::notifyModified);
-    }
-
-    private void notifyModified() {
-        if (modifiedListener != null) {
-            modifiedListener.run();
-        }
     }
 
     @Override
@@ -67,11 +59,6 @@ public class ClassicGraphView extends JPanel implements GraphView {
     @Override
     public void setLoading(boolean loading) {
         panel.setLoading(loading);
-    }
-
-    @Override
-    public void addModifiedListener(Runnable listener) {
-        this.modifiedListener = listener;
     }
 
     @Override

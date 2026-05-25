@@ -1,412 +1,428 @@
 package org.example.controller;
 
+import org.example.model.graph.Edge;
 import org.example.model.graph.Graph;
-import org.example.service.export.TextExporter;
-import org.example.service.export.TextImporter;
-import org.example.service.export.VisualExportOptions;
-import org.example.service.export.VisualExporter;
-import org.example.service.layout.GraphLayoutGenerator;
-import org.example.view.ExportOptionsDialog;
-import org.example.view.LayoutAlgorithmDialog;
+import org.example.model.graph.Vertex;
+import org.example.view.GraphEditDialogs;
+import org.example.view.GraphPanel;
 import org.example.view.MainFrame;
-import org.example.view.util.BackgroundTasks;
-import org.example.view.util.FileChooserDialogs;
+import org.example.view.interaction.EdgeHighlight;
+import org.example.view.interaction.GraphHighlight;
+import org.example.view.interaction.VerticesHighlight;
 import org.example.view.workspace.ActiveGraphView;
+import org.example.view.workspace.GraphPanelView;
 import org.example.view.workspace.GraphView;
 
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
-import javax.swing.filechooser.FileNameExtensionFilter;
-import java.awt.event.ActionEvent;
-import java.io.File;
-import java.util.Optional;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.function.Consumer;
 
 public class GraphController {
-    private static final String LAYOUT_EXTENSION = "layout";
-
-    private enum DiscardChoice {
-        SAVE, DISCARD, CANCEL
-    }
-
-    private record CompareGraphs(Graph fruchterman, Graph tutte) {}
-
     private final MainFrame view;
-    private final GraphLayoutGenerator layoutGenerator;
-    private final VisualExporter visualExporter = new VisualExporter();
-    private final PropertiesPanelController propertiesPanelController;
     private final GraphView workspace;
+    private final Runnable onGraphModified;
 
-    private File sourceGraphFile;
-    private File savedGraphFile;
-    private boolean loading;
-    private boolean unsaved;
+    private ActiveGraphView boundView;
+    private GraphPanel boundPanel;
+    private MouseAdapter mouseAdapter;
+    private KeyAdapter keyAdapter;
+    private final Consumer<GraphHighlight> onSelectionChanged = this::updateDeleteEnabled;
 
-    public GraphController(MainFrame view, GraphLayoutGenerator layoutGenerator) {
+    private Set<Vertex> dragVertices = Set.of();
+    private Vertex rightPressVertex;
+    private boolean rightButtonActive;
+    private boolean vertexDragged;
+    private boolean pointerMoved;
+    private int lastMouseX;
+    private int lastMouseY;
+
+    public GraphController(MainFrame view, Runnable onGraphModified) {
         this.view = view;
-        this.layoutGenerator = layoutGenerator;
         this.workspace = view.getGraphView();
+        this.onGraphModified = onGraphModified;
 
-        view.getOpenTextItem().addActionListener(this::openGraphFromFile);
-        view.getOpenLayoutItem().addActionListener(this::openLayoutFromFile);
-        view.getCloseGraphItem().addActionListener(this::closeGraph);
-        view.getSaveTextItem().addActionListener(this::saveTextFile);
-        view.getSaveAsTextItem().addActionListener(this::saveTextFileAs);
-        view.getExportItem().addActionListener(this::exportImage);
-        workspace.addModifiedListener(this::markUnsaved);
-        propertiesPanelController = new PropertiesPanelController(view, this::markUnsaved);
-        view.setWindowClosingHandler(_ -> confirmDiscardAndRun(this::exitApplication));
-        updateControls();
+        view.getAddVertexItem().addActionListener(_ -> addVertex());
+        view.getAddEdgeItem().addActionListener(_ -> addEdge());
+        view.getDeleteItem().addActionListener(_ -> deleteSelection());
+
+        workspace.addActiveViewChangeListener(this::rebindActiveView);
+        rebindActiveView(workspace.getActiveView());
     }
 
-    private void exitApplication() {
-        System.exit(0);
+    public void setEditActionsEnabled(boolean enabled) {
+        view.getAddVertexItem().setEnabled(enabled);
+        view.getAddEdgeItem().setEnabled(enabled);
+        if (!enabled) {
+            view.getDeleteItem().setEnabled(false);
+        } else if (boundView != null) {
+            view.getDeleteItem().setEnabled(boundView.getSelection().isInteractive());
+        }
     }
 
-    private void saveTextFile(ActionEvent e) {
-        saveGraph(false, true, null);
+    private void rebindActiveView(ActiveGraphView activeView) {
+        if (boundView != null) {
+            boundView.removeSelectionChangeListener(onSelectionChanged);
+        }
+        detachFromPanel(boundPanel);
+
+        boundView = activeView;
+        boundPanel = activeView instanceof GraphPanelView panelView ? panelView.getGraphPanel() : null;
+
+        if (boundView == null) {
+            view.getDeleteItem().setEnabled(false);
+            return;
+        }
+
+        boundView.addSelectionChangeListener(onSelectionChanged);
+        updateDeleteEnabled(boundView.getSelection());
+
+        if (boundPanel != null) {
+            attachToPanel(boundPanel);
+        }
     }
 
-    private void saveTextFileAs(ActionEvent e) {
-        saveGraph(true, true, null);
+    private void attachToPanel(GraphPanel panel) {
+        mouseAdapter = createMouseAdapter(panel);
+        panel.addMouseListener(mouseAdapter);
+        panel.addMouseMotionListener(mouseAdapter);
+        keyAdapter = createKeyAdapter(panel);
+        panel.addKeyListener(keyAdapter);
     }
 
-    private void saveGraph(boolean chooseLocation, boolean showSuccessMessage, Runnable onSuccess) {
+    private void detachFromPanel(GraphPanel panel) {
+        if (panel == null) {
+            return;
+        }
+        if (mouseAdapter != null) {
+            panel.removeMouseListener(mouseAdapter);
+            panel.removeMouseMotionListener(mouseAdapter);
+            mouseAdapter = null;
+        }
+        if (keyAdapter != null) {
+            panel.removeKeyListener(keyAdapter);
+            keyAdapter = null;
+        }
+        dragVertices = Set.of();
+        rightPressVertex = null;
+        rightButtonActive = false;
+        vertexDragged = false;
+        pointerMoved = false;
+    }
+
+    private void addVertex() {
         Graph graph = workspace.getActiveGraph();
-        if (graph == null) {
-            JOptionPane.showMessageDialog(view, "Brak grafu do zapisania.");
-            return;
-        }
-
-        File fileToSave;
-        if (chooseLocation || savedGraphFile == null) {
-            FileNameExtensionFilter filter = new FileNameExtensionFilter(
-                    "Pliki układu (*." + LAYOUT_EXTENSION + ")",
-                    LAYOUT_EXTENSION
-            );
-            Optional<File> fileChoice = FileChooserDialogs.showSaveWithExtension(
-                    view,
-                    filter,
-                    defaultSaveFile()
-            );
-            if (fileChoice.isEmpty()) {
-                return;
-            }
-            fileToSave = fileChoice.get();
-        } else {
-            fileToSave = savedGraphFile;
-        }
-
-        saveGraphToFile(graph, fileToSave, showSuccessMessage, onSuccess);
-    }
-
-    private void saveGraphToFile(Graph graph, File fileToSave, boolean showSuccessMessage, Runnable onSuccess) {
-        BackgroundTasks.run(
-                view,
-                () -> {
-                    new TextExporter().export(graph, fileToSave);
-                    return null;
-                },
-                _ -> {
-                    savedGraphFile = fileToSave;
-                    setUnsaved(false);
-                    updateControls();
-                    if (showSuccessMessage) {
-                        JOptionPane.showMessageDialog(
-                                view,
-                                "Graf został pomyślnie zapisany.",
-                                "Sukces",
-                                JOptionPane.INFORMATION_MESSAGE
-                        );
-                    }
-                    if (onSuccess != null) {
-                        onSuccess.run();
-                    }
-                },
-                "Błąd podczas zapisu: "
-        );
-    }
-
-    private void exportImage(ActionEvent e) {
-        Graph graph = workspace.getActiveGraph();
-        if (graph == null) {
-            JOptionPane.showMessageDialog(view, "Brak grafu do wyeksportowania.");
-            return;
-        }
-        if (graph.getVertices().isEmpty()) {
-            JOptionPane.showMessageDialog(view, "Graf nie zawiera wierzchołków.");
-            return;
-        }
-
         ActiveGraphView activeView = workspace.getActiveView();
-        VisualExportOptions options = ExportOptionsDialog.showAndGetOptions(
+        if (graph == null || activeView == null) {
+            return;
+        }
+
+        Set<Vertex> selectedVertices = activeView.getSelection().selectedVertices();
+
+        GraphEditDialogs.VertexInput input = GraphEditDialogs.showAddVertex(
                 view,
-                activeView.isShowLabels(),
-                activeView.isShowWeights()
+                graph.nextVertexId(),
+                activeView.getViewCenterGraphX(),
+                activeView.getViewCenterGraphY(),
+                selectedVertices.size()
         );
-        if (options == null) {
+        if (input == null) {
             return;
         }
 
-        Optional<FileChooserDialogs.SaveFileChoice> fileChoice = FileChooserDialogs.showVisualExportSave(view);
-        if (fileChoice.isEmpty()) {
-            return;
-        }
-
-        FileChooserDialogs.SaveFileChoice choice = fileChoice.get();
-
-        BackgroundTasks.runVoid(
-                view,
-                () -> visualExporter.export(graph, choice.file(), options, choice.format()),
-                "Eksport zakończony pomyślnie.",
-                "Błąd podczas eksportu: "
-        );
-    }
-
-    private void openGraphFromFile(ActionEvent e) {
-        confirmDiscardAndRun(this::loadGraphFromFile);
-    }
-
-    private void openLayoutFromFile(ActionEvent e) {
-        confirmDiscardAndRun(this::loadLayoutFromFile);
-    }
-
-    private void loadLayoutFromFile() {
-        Optional<File> fileChoice = FileChooserDialogs.showOpenLayout(view, LAYOUT_EXTENSION);
-        if (fileChoice.isEmpty()) {
-            return;
-        }
-        File layoutFile = fileChoice.get();
-
-        setLoading(true);
-        BackgroundTasks.run(
-                view,
-                () -> new TextImporter().importGraph(layoutFile),
-                graph -> setGraphFromLayoutFile(graph, layoutFile),
-                "Błąd podczas otwierania układu: ",
-                () -> setLoading(false)
-        );
-    }
-
-    private void closeGraph(ActionEvent e) {
-        if (!workspace.hasGraph()) {
-            return;
-        }
-        confirmDiscardAndRun(this::clearGraph);
-    }
-
-    private void loadGraphFromFile() {
-        Optional<File> fileChoice = FileChooserDialogs.showOpen(view);
-        if (fileChoice.isEmpty()) {
-            return;
-        }
-        File selectedFile = fileChoice.get();
-
-        LayoutAlgorithmDialog.Choice choice = LayoutAlgorithmDialog.show(view);
-        if (choice == null) {
-            return;
-        }
-
-        setLoading(true);
-        view.showImportProgress("Generowanie układu");
-
-        switch (choice) {
-            case FRUCHTERMAN -> generateSingleLayout(selectedFile, 1);
-            case TUTTE -> generateSingleLayout(selectedFile, 2);
-            case COMPARE_BOTH -> generateCompareLayouts(selectedFile);
-        }
-    }
-
-    private void generateSingleLayout(File selectedFile, int algorithmId) {
-        BackgroundTasks.run(
-                view,
-                () -> layoutGenerator.generateLayout(
-                        selectedFile,
-                        algorithmId,
-                        step -> SwingUtilities.invokeLater(() -> view.setImportProgressStep(step))
-                ),
-                graph -> setSingleGraph(graph, selectedFile),
-                "Błąd podczas generowania układu: ",
-                this::finishImport
-        );
-    }
-
-    private void generateCompareLayouts(File selectedFile) {
-        BackgroundTasks.run(
-                view,
-                () -> {
-                    Graph fruchterman = layoutGenerator.generateLayout(
-                            selectedFile,
-                            1,
-                            step -> SwingUtilities.invokeLater(() ->
-                                    view.setImportProgressStep("Fruchterman: " + step))
-                    );
-                    Graph tutte = layoutGenerator.generateLayout(
-                            selectedFile,
-                            2,
-                            step -> SwingUtilities.invokeLater(() ->
-                                    view.setImportProgressStep("Tutte: " + step))
-                    );
-                    return new CompareGraphs(fruchterman, tutte);
-                },
-                result -> setCompareGraphs(result.fruchterman(), result.tutte(), selectedFile),
-                "Błąd podczas generowania układu: ",
-                this::finishImport
-        );
-    }
-
-    private void finishImport() {
-        view.hideImportProgress();
-        setLoading(false);
-    }
-
-    private void clearGraph() {
-        sourceGraphFile = null;
-        savedGraphFile = null;
-        workspace.clear();
-        propertiesPanelController.clearSelection();
-        setUnsaved(false);
-        updateControls();
-    }
-
-    private void setSingleGraph(Graph graph, File sourceGraphFile) {
-        view.setImportProgressStep("Rysowanie grafu");
-        this.sourceGraphFile = sourceGraphFile;
-        this.savedGraphFile = null;
-        workspace.showSingle(graph);
-        setUnsaved(true);
-        updateControls();
-    }
-
-    private void setCompareGraphs(Graph left, Graph right, File sourceGraphFile) {
-        view.setImportProgressStep("Rysowanie grafu");
-        this.sourceGraphFile = sourceGraphFile;
-        this.savedGraphFile = null;
-        workspace.showCompare(left, right);
-        setUnsaved(true);
-        updateControls();
-    }
-
-    private void setGraphFromLayoutFile(Graph graph, File layoutFile) {
-        this.sourceGraphFile = null;
-        this.savedGraphFile = layoutFile;
-        workspace.showSingle(graph);
-        setUnsaved(false);
-        updateControls();
-    }
-
-    private File defaultSaveFile() {
-        if (savedGraphFile != null) {
-            return savedGraphFile;
-        }
-        if (sourceGraphFile == null) {
-            return null;
-        }
-        String baseName = sourceGraphFile.getName();
-        int dotIndex = baseName.lastIndexOf('.');
-        if (dotIndex > 0) {
-            baseName = baseName.substring(0, dotIndex);
-        }
-        baseName = baseName + workspace.getActiveView().getPaneSide().saveFilenameSuffix();
-        File parent = sourceGraphFile.getParentFile();
-        if (parent == null) {
-            parent = new File(".");
-        }
-        return new File(parent, baseName + "." + LAYOUT_EXTENSION);
-    }
-
-    private String documentDisplayName() {
-        if (!workspace.hasGraph()) {
-            return null;
-        }
-        String fileName;
-        if (savedGraphFile != null) {
-            fileName = savedGraphFile.getName();
-        } else {
-            File defaultSave = defaultSaveFile();
-            fileName = defaultSave != null ? defaultSave.getName() : null;
-        }
-        if (fileName == null) {
-            return workspace.isCompareMode() ? "porównanie" : null;
-        }
-        String name = stripExtension(fileName);
-        if (workspace.isCompareMode()) {
-            int dashIndex = name.lastIndexOf('-');
-            if (dashIndex > 0) {
-                name = name.substring(0, dashIndex);
+        try {
+            Vertex vertex = graph.addVertexAt(input.id(), input.x(), input.y());
+            if (input.connectToSelected()) {
+                for (Vertex selected : selectedVertices) {
+                    if (!graph.hasEdge(vertex, selected)) {
+                        graph.addEdge(vertex, selected, 1.0);
+                    }
+                }
             }
-            return name + " (porównanie)";
-        }
-        return name;
-    }
-
-    private static String stripExtension(String fileName) {
-        int dotIndex = fileName.lastIndexOf('.');
-        if (dotIndex > 0) {
-            return fileName.substring(0, dotIndex);
-        }
-        return fileName;
-    }
-
-    private void markUnsaved() {
-        if (workspace.hasGraph() && !loading) {
-            setUnsaved(true);
+            activeView.selectVertex(vertex);
+            activeView.repaint();
+            onGraphModified.run();
+        } catch (IllegalArgumentException ex) {
+            showError(ex.getMessage());
         }
     }
 
-    private void setUnsaved(boolean unsaved) {
-        this.unsaved = unsaved;
-        view.updateTitle(documentDisplayName(), unsaved);
-    }
-
-    private void confirmDiscardAndRun(Runnable action) {
-        if (!unsaved) {
-            action.run();
+    private void addEdge() {
+        Graph graph = workspace.getActiveGraph();
+        ActiveGraphView activeView = workspace.getActiveView();
+        if (graph == null || activeView == null) {
             return;
         }
 
-        switch (askDiscardUnsavedChanges()) {
-            case SAVE -> saveGraph(false, false, action);
-            case DISCARD -> action.run();
-            case CANCEL -> { }
+        GraphEditDialogs.EdgeInput input = GraphEditDialogs.showAddEdge(view);
+        if (input == null) {
+            return;
+        }
+
+        Vertex source = graph.getVertex(input.sourceId());
+        if (source == null) {
+            showError("Nie istnieje wierzchołek o ID: " + input.sourceId());
+            return;
+        }
+        Vertex target = graph.getVertex(input.targetId());
+        if (target == null) {
+            showError("Nie istnieje wierzchołek o ID: " + input.targetId());
+            return;
+        }
+        if (graph.hasEdge(source, target)) {
+            showError("Krawędź między tymi wierzchołkami już istnieje.");
+            return;
+        }
+
+        graph.addEdge(source, target, input.weight());
+        Edge addedEdge = graph.findEdge(source, target);
+        if (addedEdge != null) {
+            activeView.selectEdge(addedEdge);
+        }
+        activeView.repaint();
+        onGraphModified.run();
+    }
+
+    private void deleteSelection() {
+        Graph graph = workspace.getActiveGraph();
+        ActiveGraphView activeView = workspace.getActiveView();
+        if (graph == null || activeView == null) {
+            return;
+        }
+
+        GraphHighlight selection = activeView.getSelection();
+        if (selection.isEmpty()) {
+            return;
+        }
+
+        switch (selection) {
+            case EdgeHighlight edgeHighlight -> graph.removeEdge(edgeHighlight.edge());
+            case VerticesHighlight verticesHighlight -> {
+                for (Vertex vertex : new ArrayList<>(verticesHighlight.vertices())) {
+                    graph.removeVertex(vertex);
+                }
+            }
+            default -> { }
+        }
+
+        activeView.clearSelection();
+        activeView.repaint();
+        onGraphModified.run();
+    }
+
+    private void updateDeleteEnabled(GraphHighlight highlight) {
+        view.getDeleteItem().setEnabled(highlight.isInteractive());
+    }
+
+    private MouseAdapter createMouseAdapter(GraphPanel panel) {
+        return new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (panel.cannotInteract()) {
+                    return;
+                }
+                panel.requestInteractionFocus();
+                lastMouseX = e.getX();
+                lastMouseY = e.getY();
+                pointerMoved = false;
+
+                if (isRightMouseButton(e)) {
+                    beginRightButtonInteraction(panel, e);
+                    return;
+                }
+                if (!isLeftMouseButton(e)) {
+                    return;
+                }
+
+                GraphHighlight selection = panel.getSelection();
+                Vertex hit = panel.findVertexAt(e.getX(), e.getY());
+                if (hit != null && selection.containsVertex(hit)) {
+                    dragVertices = new LinkedHashSet<>(selection.selectedVertices());
+                } else if (hit != null) {
+                    dragVertices = Set.of(hit);
+                } else {
+                    dragVertices = Set.of();
+                }
+                panel.setDragVertices(dragVertices);
+
+                if (dragVertices.isEmpty()) {
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                } else {
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (panel.cannotInteract()) {
+                    return;
+                }
+                if (isRightMouseButton(e) || e.isPopupTrigger() || rightButtonActive) {
+                    finishRightButtonInteraction(panel, e);
+                    return;
+                }
+                if (!isLeftMouseButton(e)) {
+                    return;
+                }
+                if (vertexDragged) {
+                    onGraphModified.run();
+                }
+                if (!dragVertices.isEmpty() && vertexDragged) {
+                    if (dragVertices.size() == 1) {
+                        Vertex dragged = dragVertices.iterator().next();
+                        if (!panel.getSelection().containsVertex(dragged)) {
+                            panel.selectVertex(dragged);
+                        }
+                    }
+                } else if (!pointerMoved) {
+                    Vertex clickedVertex = panel.findVertexAt(e.getX(), e.getY());
+                    if (clickedVertex != null) {
+                        panel.selectVertex(clickedVertex);
+                    } else {
+                        Edge clickedEdge = panel.findEdgeAt(e.getX(), e.getY());
+                        if (clickedEdge != null) {
+                            panel.selectEdge(clickedEdge);
+                        } else {
+                            panel.clearSelection();
+                        }
+                    }
+                }
+                dragVertices = Set.of();
+                panel.setDragVertices(dragVertices);
+                vertexDragged = false;
+                panel.updateInteractionCursor();
+                panel.repaint();
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (panel.cannotInteract()) {
+                    return;
+                }
+                pointerMoved = true;
+
+                if (rightButtonActive || isRightMouseButton(e)) {
+                    if (panel.getSelectionBox().isActive()) {
+                        panel.getSelectionBox().update(e.getX(), e.getY());
+                        panel.repaint();
+                    }
+                    return;
+                }
+                if (!isLeftMouseButton(e)) {
+                    return;
+                }
+
+                int dx = e.getX() - lastMouseX;
+                int dy = e.getY() - lastMouseY;
+                if (!dragVertices.isEmpty()) {
+                    vertexDragged = true;
+                    panel.moveVerticesByScreenDelta(dragVertices, dx, dy);
+                    lastMouseX = e.getX();
+                    lastMouseY = e.getY();
+                } else {
+                    panel.panByScreenDelta(dx, dy);
+                    lastMouseX = e.getX();
+                    lastMouseY = e.getY();
+                }
+                panel.repaint();
+            }
+        };
+    }
+
+    private KeyAdapter createKeyAdapter(GraphPanel panel) {
+        return new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (panel.cannotInteract()) {
+                    return;
+                }
+                if (e.getKeyCode() == KeyEvent.VK_DELETE || e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
+                    if (!panel.getSelection().isEmpty()) {
+                        deleteSelection();
+                    }
+                }
+            }
+        };
+    }
+
+    private void beginRightButtonInteraction(GraphPanel panel, MouseEvent e) {
+        rightButtonActive = true;
+        rightPressVertex = panel.findVertexAt(e.getX(), e.getY());
+        if (rightPressVertex == null) {
+            panel.getSelectionBox().begin(e.getX(), e.getY());
+            panel.setCursor(Cursor.getDefaultCursor());
+        } else {
+            panel.getSelectionBox().clear();
+            panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         }
     }
 
-    private DiscardChoice askDiscardUnsavedChanges() {
-        String[] options = {"Zapisz", "Nie zapisuj", "Anuluj"};
-        int result = JOptionPane.showOptionDialog(
-                view,
-                "Masz niezapisane zmiany. Czy chcesz je zapisać przed kontynuowaniem?",
-                "Niezapisane zmiany",
-                JOptionPane.DEFAULT_OPTION,
-                JOptionPane.WARNING_MESSAGE,
-                null,
-                options,
-                options[0]
-        );
-        if (result == 0) {
-            return DiscardChoice.SAVE;
+    private void finishRightButtonInteraction(GraphPanel panel, MouseEvent e) {
+        boolean additive = e.isShiftDown();
+        if (panel.getSelectionBox().isSignificantDrag()) {
+            applyVertexSelection(
+                    panel,
+                    panel.findVerticesInScreenRect(panel.getSelectionBox().screenBounds()),
+                    additive
+            );
+        } else if (rightPressVertex != null && !pointerMoved) {
+            if (additive) {
+                addVertexToSelection(panel, rightPressVertex);
+            } else {
+                toggleVertexInSelection(panel, rightPressVertex);
+            }
         }
-        if (result == 1) {
-            return DiscardChoice.DISCARD;
-        }
-        return DiscardChoice.CANCEL;
+
+        panel.getSelectionBox().clear();
+        rightPressVertex = null;
+        rightButtonActive = false;
+        dragVertices = Set.of();
+        panel.setDragVertices(dragVertices);
+        vertexDragged = false;
+        panel.updateInteractionCursor();
+        panel.repaint();
     }
 
-    private void setLoading(boolean loading) {
-        this.loading = loading;
-        workspace.setLoading(loading);
-        updateControls();
+    private static void toggleVertexInSelection(GraphPanel panel, Vertex vertex) {
+        panel.applySelectionHighlight(panel.getSelection().toggleVertex(vertex));
     }
 
-    private void updateControls() {
-        boolean graphActionsEnabled = workspace.hasGraph() && !loading;
-        view.getOpenTextItem().setEnabled(!loading);
-        view.getOpenLayoutItem().setEnabled(!loading);
-        view.getCloseGraphItem().setEnabled(graphActionsEnabled);
-        view.getSaveTextItem().setEnabled(graphActionsEnabled && savedGraphFile != null);
-        view.getSaveAsTextItem().setEnabled(graphActionsEnabled);
-        view.getExportItem().setEnabled(graphActionsEnabled);
-        view.getToolPanel().setControlsEnabled(graphActionsEnabled);
-        propertiesPanelController.setControlsEnabled(graphActionsEnabled);
+    private static void addVertexToSelection(GraphPanel panel, Vertex vertex) {
+        LinkedHashSet<Vertex> combined = new LinkedHashSet<>(panel.getSelection().selectedVertices());
+        combined.add(vertex);
+        panel.applySelectionHighlight(GraphHighlight.vertices(combined));
+    }
+
+    private static void applyVertexSelection(GraphPanel panel, Set<Vertex> picked, boolean additive) {
+        if (picked.isEmpty()) {
+            if (!additive) {
+                panel.clearSelection();
+            }
+            return;
+        }
+        LinkedHashSet<Vertex> combined = new LinkedHashSet<>();
+        if (additive) {
+            combined.addAll(panel.getSelection().selectedVertices());
+        }
+        combined.addAll(picked);
+        panel.applySelectionHighlight(GraphHighlight.vertices(combined));
+    }
+
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(view, message, "Błąd", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private static boolean isRightMouseButton(MouseEvent e) {
+        return SwingUtilities.isRightMouseButton(e) || e.getButton() == MouseEvent.BUTTON3;
+    }
+
+    private static boolean isLeftMouseButton(MouseEvent e) {
+        return SwingUtilities.isLeftMouseButton(e) || e.getButton() == MouseEvent.BUTTON1;
     }
 }

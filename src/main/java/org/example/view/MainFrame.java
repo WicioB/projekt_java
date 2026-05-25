@@ -23,6 +23,9 @@ public class MainFrame extends JFrame {
     private final JMenuItem saveTextItem;
     private final JMenuItem saveAsTextItem;
     private final JMenuItem exportItem;
+    private final JMenuItem addVertexItem;
+    private final JMenuItem addEdgeItem;
+    private final JMenuItem deleteItem;
 
     public MainFrame() {
         setTitle(BASE_TITLE);
@@ -47,6 +50,19 @@ public class MainFrame extends JFrame {
         fileMenu.add(exportItem);
 
         menuBar.add(fileMenu);
+
+        JMenu editMenu = new JMenu("Edycja");
+        addVertexItem = new JMenuItem("Dodaj wierzchołek");
+        addEdgeItem = new JMenuItem("Dodaj krawędź");
+        deleteItem = new JMenuItem("Usuń");
+        addVertexItem.setEnabled(false);
+        addEdgeItem.setEnabled(false);
+        deleteItem.setEnabled(false);
+        editMenu.add(addVertexItem);
+        editMenu.add(addEdgeItem);
+        editMenu.add(deleteItem);
+        menuBar.add(editMenu);
+
         setJMenuBar(menuBar);
 
         toolPanel = new ToolPanel();
@@ -129,5 +145,17 @@ public class MainFrame extends JFrame {
 
     public JMenuItem getExportItem() {
         return exportItem;
+    }
+
+    public JMenuItem getAddVertexItem() {
+        return addVertexItem;
+    }
+
+    public JMenuItem getAddEdgeItem() {
+        return addEdgeItem;
+    }
+
+    public JMenuItem getDeleteItem() {
+        return deleteItem;
     }
 }

@@ -28,7 +28,6 @@ public class SplitCompareGraphView extends JPanel implements GraphView {
     private final JPanel rightWrapper;
 
     private ActiveGraphView activeView;
-    private Runnable modifiedListener;
     private final List<Consumer<ActiveGraphView>> activeViewChangeListeners = new ArrayList<>();
 
     public SplitCompareGraphView() {
@@ -45,8 +44,6 @@ public class SplitCompareGraphView extends JPanel implements GraphView {
         splitPane.setContinuousLayout(true);
         add(splitPane, BorderLayout.CENTER);
 
-        leftPanel.setGraphModifiedListener(this::notifyModified);
-        rightPanel.setGraphModifiedListener(this::notifyModified);
         registerActivation(leftPanel, leftView);
         registerActivation(rightPanel, rightView);
         updateActiveBorder();
@@ -101,12 +98,6 @@ public class SplitCompareGraphView extends JPanel implements GraphView {
                 : BorderFactory.createEmptyBorder(2, 2, 2, 2));
     }
 
-    private void notifyModified() {
-        if (modifiedListener != null) {
-            modifiedListener.run();
-        }
-    }
-
     @Override
     public boolean hasGraph() {
         return leftPanel.getGraph() != null || rightPanel.getGraph() != null;
@@ -153,11 +144,6 @@ public class SplitCompareGraphView extends JPanel implements GraphView {
     public void setLoading(boolean loading) {
         leftPanel.setLoading(loading);
         rightPanel.setLoading(loading);
-    }
-
-    @Override
-    public void addModifiedListener(Runnable listener) {
-        this.modifiedListener = listener;
     }
 
     @Override

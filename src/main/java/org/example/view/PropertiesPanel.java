@@ -12,6 +12,10 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
 import java.util.function.BiConsumer;
 
 public class PropertiesPanel extends JPanel {
@@ -25,8 +29,8 @@ public class PropertiesPanel extends JPanel {
     private final JSpinner vertexXSpinner;
     private final JSpinner vertexYSpinner;
 
-    private final JTextField edgeSourceField;
-    private final JTextField edgeTargetField;
+    private final JComboBox<Integer> edgeSourceCombo;
+    private final JComboBox<Integer> edgeTargetCombo;
     private final JSpinner edgeWeightSpinner;
 
     private final JButton toggleButton;
@@ -38,6 +42,7 @@ public class PropertiesPanel extends JPanel {
 
     private BiConsumer<Vertex, double[]> vertexChangeListener;
     private BiConsumer<Edge, Double> edgeWeightChangeListener;
+    private BiConsumer<Edge, int[]> edgeEndpointsChangeListener;
 
     public PropertiesPanel() {
         setLayout(new BorderLayout());
@@ -67,8 +72,8 @@ public class PropertiesPanel extends JPanel {
         vertexYSpinner = createCoordinateSpinner();
         JPanel vertexPanel = buildVertexPanel();
 
-        edgeSourceField = createReadOnlyField();
-        edgeTargetField = createReadOnlyField();
+        edgeSourceCombo = new JComboBox<>();
+        edgeTargetCombo = new JComboBox<>();
         edgeWeightSpinner = createWeightSpinner();
         JPanel edgePanel = buildEdgePanel();
 
@@ -148,7 +153,7 @@ public class PropertiesPanel extends JPanel {
         panel.add(new JLabel("Od:"), gbc);
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(edgeSourceField, gbc);
+        panel.add(edgeSourceCombo, gbc);
 
         gbc.gridx = 0;
         gbc.gridy++;
@@ -156,7 +161,7 @@ public class PropertiesPanel extends JPanel {
         panel.add(new JLabel("Do:"), gbc);
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(edgeTargetField, gbc);
+        panel.add(edgeTargetCombo, gbc);
 
         gbc.gridx = 0;
         gbc.gridy++;
@@ -224,6 +229,24 @@ public class PropertiesPanel extends JPanel {
                 edgeWeightChangeListener.accept(edge, weight);
             }
         });
+
+        Runnable onEdgeEndpointsChanged = () -> {
+            if (updatingFields || edgeEndpointsChangeListener == null) {
+                return;
+            }
+            Edge edge = currentEdge();
+            if (edge == null) {
+                return;
+            }
+            Integer sourceId = (Integer) edgeSourceCombo.getSelectedItem();
+            Integer targetId = (Integer) edgeTargetCombo.getSelectedItem();
+            if (sourceId == null || targetId == null) {
+                return;
+            }
+            edgeEndpointsChangeListener.accept(edge, new int[]{sourceId, targetId});
+        };
+        edgeSourceCombo.addActionListener(_ -> onEdgeEndpointsChanged.run());
+        edgeTargetCombo.addActionListener(_ -> onEdgeEndpointsChanged.run());
     }
 
     private GraphHighlight currentHighlight = GraphHighlight.empty();
@@ -242,6 +265,22 @@ public class PropertiesPanel extends JPanel {
 
     public void setEdgeWeightChangeListener(BiConsumer<Edge, Double> listener) {
         this.edgeWeightChangeListener = listener;
+    }
+
+    public void setEdgeEndpointsChangeListener(BiConsumer<Edge, int[]> listener) {
+        this.edgeEndpointsChangeListener = listener;
+    }
+
+    public void setVertexChoices(Collection<Vertex> vertices) {
+        List<Integer> ids = vertices.stream()
+                .map(Vertex::getId)
+                .sorted(Comparator.naturalOrder())
+                .toList();
+        updatingFields = true;
+        DefaultComboBoxModel<Integer> model = new DefaultComboBoxModel<>(ids.toArray(Integer[]::new));
+        edgeSourceCombo.setModel(model);
+        edgeTargetCombo.setModel(new DefaultComboBoxModel<>(new ArrayList<>(ids).toArray(Integer[]::new)));
+        updatingFields = false;
     }
 
     public void showHighlight(GraphHighlight highlight) {
@@ -277,8 +316,8 @@ public class PropertiesPanel extends JPanel {
 
     private void showEdgeForm(Edge edge) {
         updatingFields = true;
-        edgeSourceField.setText(String.valueOf(edge.getSource().getId()));
-        edgeTargetField.setText(String.valueOf(edge.getTarget().getId()));
+        edgeSourceCombo.setSelectedItem(edge.getSource().getId());
+        edgeTargetCombo.setSelectedItem(edge.getTarget().getId());
         edgeWeightSpinner.setValue(edge.getWeight());
         updatingFields = false;
         cardLayout.show(formCardPanel, "edge");
@@ -303,6 +342,8 @@ public class PropertiesPanel extends JPanel {
     public void setControlsEnabled(boolean enabled) {
         vertexXSpinner.setEnabled(enabled);
         vertexYSpinner.setEnabled(enabled);
+        edgeSourceCombo.setEnabled(enabled);
+        edgeTargetCombo.setEnabled(enabled);
         edgeWeightSpinner.setEnabled(enabled);
         toggleButton.setEnabled(enabled);
         if (!enabled) {

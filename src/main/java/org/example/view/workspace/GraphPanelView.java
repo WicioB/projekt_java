@@ -1,5 +1,7 @@
 package org.example.view.workspace;
 
+import org.example.model.graph.Edge;
+import org.example.model.graph.Vertex;
 import org.example.view.GraphPanel;
 import org.example.view.interaction.GraphHighlight;
 
@@ -75,8 +77,27 @@ public class GraphPanelView implements ActiveGraphView {
     }
 
     @Override
-    public void setSelectionChangeListener(Consumer<GraphHighlight> listener) {
-        panel.setSelectionChangeListener(listener);
+    public void selectVertex(Vertex vertex) {
+        panel.selectVertex(vertex);
+    }
+
+    @Override
+    public void selectEdge(Edge edge) {
+        panel.selectEdge(edge);
+    }
+
+    @Override
+    public void addSelectionChangeListener(Consumer<GraphHighlight> listener) {
+        panel.addSelectionChangeListener(listener);
+    }
+
+    @Override
+    public void removeSelectionChangeListener(Consumer<GraphHighlight> listener) {
+        panel.removeSelectionChangeListener(listener);
+    }
+
+    public GraphPanel getGraphPanel() {
+        return panel;
     }
 
     @Override

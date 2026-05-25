@@ -10,7 +10,6 @@ import java.util.function.Consumer;
 
 public class GraphViewHost extends JPanel implements GraphView {
     private GraphView delegate;
-    private final List<Runnable> modifiedListeners = new ArrayList<>();
     private final List<Consumer<ActiveGraphView>> activeViewChangeListeners = new ArrayList<>();
 
     public GraphViewHost() {
@@ -30,7 +29,6 @@ public class GraphViewHost extends JPanel implements GraphView {
     }
 
     private void wireDelegateListeners() {
-        delegate.addModifiedListener(() -> modifiedListeners.forEach(Runnable::run));
         delegate.addActiveViewChangeListener(view ->
                 activeViewChangeListeners.forEach(listener -> listener.accept(view)));
     }
@@ -82,11 +80,6 @@ public class GraphViewHost extends JPanel implements GraphView {
     @Override
     public void setLoading(boolean loading) {
         delegate.setLoading(loading);
-    }
-
-    @Override
-    public void addModifiedListener(Runnable listener) {
-        modifiedListeners.add(listener);
     }
 
     @Override
