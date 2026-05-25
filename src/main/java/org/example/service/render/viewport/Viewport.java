@@ -5,7 +5,7 @@ import org.example.model.graph.Graph;
 public record Viewport(ViewportMetrics fit, double zoom, double panX, double panY) {
 
     private static final double MIN_ZOOM = 0.1;
-    private static final double WHEEL_DELTA_ZOOM_FACTOR = 0.1;
+    private static final double WHEEL_ZOOM_BASE = 1.1;
 
     public static Viewport defaults() {
         return new Viewport(new ViewportMetrics(1.0, 0.0, 0.0), 1.0, 0.0, 0.0);
@@ -40,7 +40,7 @@ public record Viewport(ViewportMetrics fit, double zoom, double panX, double pan
     }
 
     public Viewport zoomedByWheelDelta(double wheelDelta, double anchorX, double anchorY) {
-        return zoomedAt(zoom - wheelDelta * WHEEL_DELTA_ZOOM_FACTOR, anchorX, anchorY);
+        return zoomedAt(zoom * Math.pow(WHEEL_ZOOM_BASE, -wheelDelta), anchorX, anchorY);
     }
 
     public double screenDeltaToGraphX(double screenDelta) {
