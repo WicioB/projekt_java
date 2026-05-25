@@ -24,6 +24,18 @@ public class FileChooserDialogs {
         return Optional.of(chooser.getSelectedFile());
     }
 
+    public static Optional<File> showOpenLayout(Component parent, String layoutExtension) {
+        JFileChooser chooser = new JFileChooser(".");
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                "Pliki układu (*." + layoutExtension + ")",
+                layoutExtension
+        ));
+        if (chooser.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return Optional.empty();
+        }
+        return Optional.of(chooser.getSelectedFile());
+    }
+
     public static Optional<File> showSaveWithExtension(
             Component parent,
             FileNameExtensionFilter filter,

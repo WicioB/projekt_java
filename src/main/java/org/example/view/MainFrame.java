@@ -14,6 +14,7 @@ public class MainFrame extends JFrame {
     private final ImportProgressOverlay importProgressOverlay;
 
     private final JMenuItem openTextItem;
+    private final JMenuItem openLayoutItem;
     private final JMenuItem closeGraphItem;
     private final JMenuItem saveTextItem;
     private final JMenuItem saveAsTextItem;
@@ -28,11 +29,13 @@ public class MainFrame extends JFrame {
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("Plik");
         openTextItem = new JMenuItem("Importuj graf");
+        openLayoutItem = new JMenuItem("Otwórz układ...");
         closeGraphItem = new JMenuItem("Zamknij graf");
         saveTextItem = new JMenuItem("Zapisz układ");
         saveAsTextItem = new JMenuItem("Zapisz układ jako...");
         exportItem = new JMenuItem("Wyeksportuj do...");
         fileMenu.add(openTextItem);
+        fileMenu.add(openLayoutItem);
         fileMenu.add(closeGraphItem);
         fileMenu.addSeparator();
         fileMenu.add(saveTextItem);
@@ -95,6 +98,10 @@ public class MainFrame extends JFrame {
 
     public JMenuItem getOpenTextItem() {
         return openTextItem;
+    }
+
+    public JMenuItem getOpenLayoutItem() {
+        return openLayoutItem;
     }
 
     public JMenuItem getCloseGraphItem() {

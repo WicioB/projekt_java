@@ -6,6 +6,7 @@ import org.example.model.graph.Vertex;
 
 import java.io.File;
 import java.io.PrintWriter;
+import java.util.Locale;
 
 public class TextExporter {
 
@@ -13,11 +14,11 @@ public class TextExporter {
         try (PrintWriter writer = new PrintWriter(file)) {
             writer.println("Vertices:");
             for (Vertex v : graph.getVertices()) {
-                writer.printf("%d %.4f %.4f%n", v.getId(), v.getX(), v.getY());
+                writer.format(Locale.US, "%d %.4f %.4f%n", v.getId(), v.getX(), v.getY());
             }
             writer.println("\nEdges:");
             for (Edge e : graph.getAllEdges()) {
-                writer.printf("%d %d %.4f%n", e.getSource().getId(), e.getTarget().getId(), e.getWeight());
+                writer.format(Locale.US, "%d %d %.4f%n", e.getSource().getId(), e.getTarget().getId(), e.getWeight());
             }
         }
     }

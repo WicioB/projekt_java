@@ -2,6 +2,7 @@ package org.example.controller;
 
 import org.example.model.graph.Graph;
 import org.example.service.export.TextExporter;
+import org.example.service.export.TextImporter;
 import org.example.service.export.VisualExportOptions;
 import org.example.service.export.VisualExporter;
 import org.example.service.layout.GraphLayoutGenerator;
@@ -39,6 +40,7 @@ public class GraphController {
         this.layoutGenerator = layoutGenerator;
 
         view.getOpenTextItem().addActionListener(this::openGraphFromFile);
+        view.getOpenLayoutItem().addActionListener(this::openLayoutFromFile);
         view.getCloseGraphItem().addActionListener(this::closeGraph);
         view.getSaveTextItem().addActionListener(this::saveTextFile);
         view.getSaveAsTextItem().addActionListener(this::saveTextFileAs);
@@ -153,6 +155,27 @@ public class GraphController {
         confirmDiscardAndRun(this::loadGraphFromFile);
     }
 
+    private void openLayoutFromFile(ActionEvent e) {
+        confirmDiscardAndRun(this::loadLayoutFromFile);
+    }
+
+    private void loadLayoutFromFile() {
+        Optional<File> fileChoice = FileChooserDialogs.showOpenLayout(view, LAYOUT_EXTENSION);
+        if (fileChoice.isEmpty()) {
+            return;
+        }
+        File layoutFile = fileChoice.get();
+
+        setLoading(true);
+        BackgroundTasks.run(
+                view,
+                () -> new TextImporter().importGraph(layoutFile),
+                graph -> setGraphFromLayoutFile(graph, layoutFile),
+                "Błąd podczas otwierania układu: ",
+                () -> setLoading(false)
+        );
+    }
+
     private void closeGraph(ActionEvent e) {
         if (graph == null) {
             return;
@@ -216,6 +239,15 @@ public class GraphController {
         this.savedGraphFile = null;
         view.getGraphPanel().setGraph(graph);
         setUnsaved(true);
+        updateControls();
+    }
+
+    private void setGraphFromLayoutFile(Graph graph, File layoutFile) {
+        this.graph = graph;
+        this.sourceGraphFile = null;
+        this.savedGraphFile = layoutFile;
+        view.getGraphPanel().setGraph(graph);
+        setUnsaved(false);
         updateControls();
     }
 
@@ -314,6 +346,7 @@ public class GraphController {
     private void updateControls() {
         boolean graphActionsEnabled = graph != null && !loading;
         view.getOpenTextItem().setEnabled(!loading);
+        view.getOpenLayoutItem().setEnabled(!loading);
         view.getCloseGraphItem().setEnabled(graphActionsEnabled);
         view.getSaveTextItem().setEnabled(graphActionsEnabled && savedGraphFile != null);
         view.getSaveAsTextItem().setEnabled(graphActionsEnabled);
