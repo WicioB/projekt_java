@@ -27,6 +27,7 @@ public class GraphPanel extends JPanel {
 
     private Vertex draggedVertex = null;
     private Vertex hoveredVertex = null;
+    private boolean vertexDragged;
 
     private boolean showLabels = true;
     private boolean showWeights = false;
@@ -42,6 +43,7 @@ public class GraphPanel extends JPanel {
     private void clearInteractionState() {
         draggedVertex = null;
         hoveredVertex = null;
+        vertexDragged = false;
         setCursor(Cursor.getDefaultCursor());
     }
 
@@ -80,7 +82,11 @@ public class GraphPanel extends JPanel {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (cantInteract()) return;
+                if (vertexDragged && graphModifiedListener != null) {
+                    graphModifiedListener.run();
+                }
                 draggedVertex = null;
+                vertexDragged = false;
                 if (hoveredVertex != null) {
                     setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
                 } else {
@@ -95,6 +101,7 @@ public class GraphPanel extends JPanel {
                 int dx = e.getX() - lastMouseX;
                 int dy = e.getY() - lastMouseY;
                 if (draggedVertex != null) {
+                    vertexDragged = true;
                     draggedVertex.setX(draggedVertex.getX() + viewport.screenDeltaToGraphX(dx));
                     draggedVertex.setY(draggedVertex.getY() + viewport.screenDeltaToGraphY(dy));
 
@@ -158,6 +165,11 @@ public class GraphPanel extends JPanel {
 
     private Runnable panChangeListener;
     private Runnable zoomChangeListener;
+    private Runnable graphModifiedListener;
+
+    public void setGraphModifiedListener(Runnable listener) {
+        this.graphModifiedListener = listener;
+    }
 
     public void setPanChangeListener(Runnable listener) {
         this.panChangeListener = listener;

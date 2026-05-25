@@ -24,9 +24,20 @@ public class FileChooserDialogs {
         return Optional.of(chooser.getSelectedFile());
     }
 
-    public static Optional<File> showSaveWithExtension(Component parent, FileNameExtensionFilter filter) {
+    public static Optional<File> showSaveWithExtension(
+            Component parent,
+            FileNameExtensionFilter filter,
+            File initialFile
+    ) {
         JFileChooser chooser = new JFileChooser(".");
         chooser.setFileFilter(filter);
+        if (initialFile != null) {
+            File parentDir = initialFile.getParentFile();
+            if (parentDir != null) {
+                chooser.setCurrentDirectory(parentDir);
+            }
+            chooser.setSelectedFile(initialFile);
+        }
         if (chooser.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return Optional.empty();
         }
