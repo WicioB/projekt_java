@@ -1,11 +1,11 @@
 package org.example.view;
 
+import org.example.model.graph.Edge;
 import org.example.model.graph.Graph;
 import org.example.model.graph.Vertex;
 import org.example.service.render.GraphRenderer;
-import org.example.service.render.scene.GraphScene;
+import org.example.service.render.scene.*;
 import org.example.service.render.viewport.RenderContext;
-import org.example.service.render.scene.SceneStyle;
 import org.example.service.render.viewport.Viewport;
 import org.example.service.render.viewport.ViewportMetrics;
 
@@ -20,6 +20,7 @@ import java.awt.event.MouseWheelEvent;
 public class GraphPanel extends JPanel {
     private static final int MIN_NODE_RADIUS = 5;
     private static final int MAX_NODE_RADIUS = 20;
+    private static final double EDGE_HIT_THRESHOLD = 8.0;
 
     private Graph graph;
     private boolean loading;
@@ -27,7 +28,11 @@ public class GraphPanel extends JPanel {
 
     private Vertex draggedVertex = null;
     private Vertex hoveredVertex = null;
+    private Edge hoveredEdge = null;
+    private Vertex selectedVertex = null;
+    private Edge selectedEdge = null;
     private boolean vertexDragged;
+    private boolean pointerMoved;
 
     private boolean showLabels = true;
     private boolean showWeights = false;
@@ -43,8 +48,56 @@ public class GraphPanel extends JPanel {
     private void clearInteractionState() {
         draggedVertex = null;
         hoveredVertex = null;
+        hoveredEdge = null;
         vertexDragged = false;
+        pointerMoved = false;
         setCursor(Cursor.getDefaultCursor());
+    }
+
+    private void updateHoverCursor() {
+        if (draggedVertex != null || hoveredVertex != null || hoveredEdge != null) {
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        } else {
+            setCursor(Cursor.getDefaultCursor());
+        }
+    }
+
+    private void updateHoverTarget(int screenX, int screenY) {
+        Vertex foundVertex = vertexAt(screenX, screenY);
+        Edge foundEdge = foundVertex == null ? edgeAt(screenX, screenY) : null;
+        if (foundVertex != hoveredVertex || foundEdge != hoveredEdge) {
+            hoveredVertex = foundVertex;
+            hoveredEdge = foundEdge;
+            updateHoverCursor();
+            repaint();
+        }
+    }
+
+    public void clearSelection() {
+        selectedVertex = null;
+        selectedEdge = null;
+        if (selectionChangeListener != null) {
+            selectionChangeListener.accept(GraphSelection.empty());
+        }
+        repaint();
+    }
+
+    private void selectVertex(Vertex vertex) {
+        selectedVertex = vertex;
+        selectedEdge = null;
+        if (selectionChangeListener != null) {
+            selectionChangeListener.accept(GraphSelection.vertex(vertex));
+        }
+        repaint();
+    }
+
+    private void selectEdge(Edge edge) {
+        selectedEdge = edge;
+        selectedVertex = null;
+        if (selectionChangeListener != null) {
+            selectionChangeListener.accept(GraphSelection.edge(edge));
+        }
+        repaint();
     }
 
     public GraphPanel() {
@@ -69,6 +122,7 @@ public class GraphPanel extends JPanel {
                 if (cantInteract()) return;
                 lastMouseX = e.getX();
                 lastMouseY = e.getY();
+                pointerMoved = false;
 
                 draggedVertex = vertexAt(e.getX(), e.getY());
 
@@ -85,19 +139,31 @@ public class GraphPanel extends JPanel {
                 if (vertexDragged && graphModifiedListener != null) {
                     graphModifiedListener.run();
                 }
+                if (draggedVertex != null) {
+                    selectVertex(draggedVertex);
+                } else if (!pointerMoved) {
+                    Vertex clickedVertex = vertexAt(e.getX(), e.getY());
+                    if (clickedVertex != null) {
+                        selectVertex(clickedVertex);
+                    } else {
+                        Edge clickedEdge = edgeAt(e.getX(), e.getY());
+                        if (clickedEdge != null) {
+                            selectEdge(clickedEdge);
+                        } else {
+                            clearSelection();
+                        }
+                    }
+                }
                 draggedVertex = null;
                 vertexDragged = false;
-                if (hoveredVertex != null) {
-                    setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                } else {
-                    setCursor(Cursor.getDefaultCursor());
-                }
+                updateHoverCursor();
                 repaint();
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
                 if (cantInteract()) return;
+                pointerMoved = true;
                 int dx = e.getX() - lastMouseX;
                 int dy = e.getY() - lastMouseY;
                 if (draggedVertex != null) {
@@ -135,22 +201,14 @@ public class GraphPanel extends JPanel {
             @Override
             public void mouseMoved(MouseEvent e) {
                 if (cantInteract()) return;
-                Vertex found = vertexAt(e.getX(), e.getY());
-                if (found != hoveredVertex) {
-                    hoveredVertex = found;
-                    if (hoveredVertex != null) {
-                        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                    } else {
-                        setCursor(Cursor.getDefaultCursor());
-                    }
-                    repaint();
-                }
+                updateHoverTarget(e.getX(), e.getY());
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                if (hoveredVertex != null) {
+                if (hoveredVertex != null || hoveredEdge != null) {
                     hoveredVertex = null;
+                    hoveredEdge = null;
                     if (draggedVertex == null) {
                         setCursor(Cursor.getDefaultCursor());
                     }
@@ -166,6 +224,25 @@ public class GraphPanel extends JPanel {
     private Runnable panChangeListener;
     private Runnable zoomChangeListener;
     private Runnable graphModifiedListener;
+    private java.util.function.Consumer<GraphSelection> selectionChangeListener;
+
+    public record GraphSelection(Vertex vertex, Edge edge) {
+        public static GraphSelection empty() {
+            return new GraphSelection(null, null);
+        }
+
+        public static GraphSelection vertex(Vertex vertex) {
+            return new GraphSelection(vertex, null);
+        }
+
+        public static GraphSelection edge(Edge edge) {
+            return new GraphSelection(null, edge);
+        }
+    }
+
+    public void setSelectionChangeListener(java.util.function.Consumer<GraphSelection> listener) {
+        this.selectionChangeListener = listener;
+    }
 
     public void setGraphModifiedListener(Runnable listener) {
         this.graphModifiedListener = listener;
@@ -190,6 +267,11 @@ public class GraphPanel extends JPanel {
     public void setGraph(Graph graph) {
         this.graph = graph;
         clearInteractionState();
+        selectedVertex = null;
+        selectedEdge = null;
+        if (selectionChangeListener != null) {
+            selectionChangeListener.accept(GraphSelection.empty());
+        }
         if (graph != null) {
             applyResetView();
             recalculateFit();
@@ -293,14 +375,73 @@ public class GraphPanel extends JPanel {
         return null;
     }
 
-    private Color vertexFillColor(Vertex v) {
-        if (v == draggedVertex) {
-            return Color.ORANGE;
+    private double edgeHitThreshold() {
+        return Math.max(EDGE_HIT_THRESHOLD, getScaledNodeRadius() * 0.75);
+    }
+
+    private Edge edgeAt(int screenX, int screenY) {
+        if (graph == null) {
+            return null;
         }
-        if (v == hoveredVertex) {
-            return Color.CYAN;
+        RenderContext ctx = currentRenderContext();
+        Edge closest = null;
+        double closestDistance = edgeHitThreshold();
+        for (Edge edge : graph.getAllEdges()) {
+            int x1 = ctx.toScreenX(edge.getSource().getX());
+            int y1 = ctx.toScreenY(edge.getSource().getY());
+            int x2 = ctx.toScreenX(edge.getTarget().getX());
+            int y2 = ctx.toScreenY(edge.getTarget().getY());
+            double distance = pointToSegmentDistance(screenX, screenY, x1, y1, x2, y2);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closest = edge;
+            }
         }
-        return SceneStyle.VERTEX_FILL_COLOR;
+        return closest;
+    }
+
+    private static double pointToSegmentDistance(
+            double px, double py,
+            double x1, double y1,
+            double x2, double y2
+    ) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        if (dx == 0 && dy == 0) {
+            return Math.hypot(px - x1, py - y1);
+        }
+        double t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+        t = Math.clamp(t, 0.0, 1.0);
+        double projX = x1 + t * dx;
+        double projY = y1 + t * dy;
+        return Math.hypot(px - projX, py - projY);
+    }
+
+    private VertexDrawStyle vertexDrawStyle(Vertex vertex) {
+        if (vertex == draggedVertex) {
+            return VertexDrawStyle.fill(SceneStyle.VERTEX_DRAG_COLOR);
+        }
+        if (vertex == selectedVertex) {
+            return VertexDrawStyle.withBorder(
+                    SceneStyle.VERTEX_FILL_COLOR,
+                    SceneStyle.VERTEX_SELECTED_BORDER_COLOR,
+                    SceneStyle.SELECTED_VERTEX_BORDER_WIDTH
+            );
+        }
+        if (vertex == hoveredVertex) {
+            return VertexDrawStyle.fill(SceneStyle.VERTEX_HOVER_COLOR);
+        }
+        return VertexDrawStyle.DEFAULT;
+    }
+
+    private EdgeDrawStyle edgeDrawStyle(Edge edge) {
+        if (edge == selectedEdge) {
+            return new EdgeDrawStyle(SceneStyle.EDGE_SELECTED_COLOR, SceneStyle.HIGHLIGHT_STROKE_WIDTH);
+        }
+        if (edge == hoveredEdge) {
+            return new EdgeDrawStyle(SceneStyle.EDGE_HOVER_COLOR, SceneStyle.HIGHLIGHT_STROKE_WIDTH);
+        }
+        return EdgeDrawStyle.DEFAULT;
     }
 
     @Override
@@ -309,7 +450,7 @@ public class GraphPanel extends JPanel {
         if (graph == null) return;
 
         Graphics2D g2d = (Graphics2D) g;
-        GraphScene scene = GraphRenderer.buildScene(graph, currentRenderContext(), this::vertexFillColor);
+        GraphScene scene = GraphRenderer.buildScene(graph, currentRenderContext(), this::vertexDrawStyle, this::edgeDrawStyle);
         GraphRenderer.render(g2d, scene);
     }
 }

@@ -11,6 +11,7 @@ public class MainFrame extends JFrame {
 
     private final GraphPanel graphPanel;
     private final ToolPanel toolPanel;
+    private final PropertiesPanel propertiesPanel;
     private final ImportProgressOverlay importProgressOverlay;
 
     private final JMenuItem openTextItem;
@@ -47,9 +48,13 @@ public class MainFrame extends JFrame {
 
         graphPanel = new GraphPanel();
         toolPanel = new ToolPanel();
+        propertiesPanel = new PropertiesPanel();
 
         setLayout(new BorderLayout());
-        add(graphPanel, BorderLayout.CENTER);
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(graphPanel, BorderLayout.CENTER);
+        centerPanel.add(propertiesPanel, BorderLayout.EAST);
+        add(centerPanel, BorderLayout.CENTER);
         add(toolPanel, BorderLayout.SOUTH);
 
         importProgressOverlay = new ImportProgressOverlay();
@@ -76,6 +81,10 @@ public class MainFrame extends JFrame {
 
     public ToolPanel getToolPanel() {
         return toolPanel;
+    }
+
+    public PropertiesPanel getPropertiesPanel() {
+        return propertiesPanel;
     }
 
     public void updateTitle(String documentName, boolean unsaved) {

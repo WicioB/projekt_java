@@ -17,15 +17,15 @@ public final class SvgSceneDrawer implements SceneDrawer {
     }
 
     @Override
-    public void drawEdge(int x1, int y1, int x2, int y2) {
+    public void drawEdge(int x1, int y1, int x2, int y2, Color color, float strokeWidth) {
         write(String.format(
-                "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"%s\" stroke-width=\"%d\" />%n",
+                "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"%s\" stroke-width=\"%.1f\" />%n",
                 x1,
                 y1,
                 x2,
                 y2,
-                SvgStyle.colorToHex(SceneStyle.EDGE_COLOR),
-                SceneStyle.EDGE_STROKE_WIDTH
+                SvgStyle.colorToHex(color),
+                strokeWidth
         ));
     }
 
@@ -43,7 +43,7 @@ public final class SvgSceneDrawer implements SceneDrawer {
     }
 
     @Override
-    public void drawVertex(int x, int y, int radius, Color fillColor, String label) {
+    public void drawVertex(int x, int y, int radius, Color fillColor, Color borderColor, float borderWidth, String label) {
         write(String.format(
                 "<circle cx=\"%d\" cy=\"%d\" r=\"%d\" fill=\"%s\" />%n",
                 x,
@@ -51,6 +51,16 @@ public final class SvgSceneDrawer implements SceneDrawer {
                 radius,
                 SvgStyle.colorToHex(fillColor)
         ));
+        if (borderColor != null && borderWidth > 0f) {
+            write(String.format(
+                    "<circle cx=\"%d\" cy=\"%d\" r=\"%d\" fill=\"none\" stroke=\"%s\" stroke-width=\"%.1f\" />%n",
+                    x,
+                    y,
+                    radius,
+                    SvgStyle.colorToHex(borderColor),
+                    borderWidth
+            ));
+        }
         if (label != null) {
             write(String.format(
                     "<text x=\"%d\" y=\"%d\" fill=\"%s\" font-family=\"%s\" font-size=\"%d\">%s</text>%n",

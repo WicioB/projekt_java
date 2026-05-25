@@ -28,6 +28,7 @@ public class GraphController {
     private final MainFrame view;
     private final GraphLayoutGenerator layoutGenerator;
     private final VisualExporter visualExporter = new VisualExporter();
+    private final PropertiesPanelController propertiesPanelController;
 
     private Graph graph;
     private File sourceGraphFile;
@@ -46,6 +47,7 @@ public class GraphController {
         view.getSaveAsTextItem().addActionListener(this::saveTextFileAs);
         view.getExportItem().addActionListener(this::exportImage);
         view.getGraphPanel().setGraphModifiedListener(this::markUnsaved);
+        propertiesPanelController = new PropertiesPanelController(view, this::markUnsaved);
         view.setWindowClosingHandler(_ -> confirmDiscardAndRun(this::exitApplication));
         updateControls();
     }
@@ -228,6 +230,7 @@ public class GraphController {
         sourceGraphFile = null;
         savedGraphFile = null;
         view.getGraphPanel().setGraph(null);
+        propertiesPanelController.clearSelection();
         setUnsaved(false);
         updateControls();
     }
@@ -352,5 +355,6 @@ public class GraphController {
         view.getSaveAsTextItem().setEnabled(graphActionsEnabled);
         view.getExportItem().setEnabled(graphActionsEnabled);
         view.getToolPanel().setControlsEnabled(graphActionsEnabled);
+        propertiesPanelController.setControlsEnabled(graphActionsEnabled);
     }
 }
