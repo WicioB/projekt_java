@@ -86,4 +86,9 @@ public class GraphViewHost extends JPanel implements GraphView {
     public void addActiveViewChangeListener(Consumer<ActiveGraphView> listener) {
         activeViewChangeListeners.add(listener);
     }
+
+    @Override
+    public void forEachView(Consumer<ActiveGraphView> consumer) {
+        delegate.forEachView(consumer);
+    }
 }

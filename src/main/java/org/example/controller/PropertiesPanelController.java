@@ -1,27 +1,30 @@
 package org.example.controller;
 
 import org.example.model.graph.Edge;
-import org.example.model.graph.Vertex;
 import org.example.model.graph.Graph;
+import org.example.model.graph.Vertex;
+import org.example.service.edit.GraphEditService;
+import org.example.service.history.SelectionSnapshot;
 import org.example.view.MainFrame;
 import org.example.view.interaction.GraphHighlight;
 import org.example.view.workspace.ActiveGraphView;
 import org.example.view.workspace.GraphView;
 
+import java.util.Map;
 import java.util.function.Consumer;
 
 public class PropertiesPanelController {
     private final MainFrame view;
     private final GraphView workspace;
-    private final Runnable onGraphModified;
+    private final GraphEditService graphEdits;
 
     private ActiveGraphView boundView;
     private final Consumer<GraphHighlight> onSelectionChanged = this::handleSelectionChanged;
 
-    public PropertiesPanelController(MainFrame view, Runnable onGraphModified) {
+    public PropertiesPanelController(MainFrame view, GraphEditService graphEdits) {
         this.view = view;
         this.workspace = view.getGraphView();
-        this.onGraphModified = onGraphModified;
+        this.graphEdits = graphEdits;
         initListeners();
         workspace.addActiveViewChangeListener(this::rebindSelection);
         rebindSelection(workspace.getActiveView());
@@ -56,20 +59,46 @@ public class PropertiesPanelController {
     }
 
     private void applyVertexChange(Vertex vertex, double[] coordinates) {
-        vertex.setX(coordinates[0]);
-        vertex.setY(coordinates[1]);
-        if (boundView != null) {
-            boundView.repaint();
+        if (boundView == null) {
+            return;
         }
-        onGraphModified.run();
+
+        Map<Integer, double[]> oldPositions = Map.of(
+                vertex.getId(),
+                new double[]{vertex.getX(), vertex.getY()}
+        );
+        graphEdits.setVertexPositionLive(vertex, coordinates[0], coordinates[1]);
+        Map<Integer, double[]> newPositions = Map.of(
+                vertex.getId(),
+                new double[]{coordinates[0], coordinates[1]}
+        );
+        SelectionSnapshot selection = SelectionSnapshot.from(boundView.getSelection());
+        graphEdits.recordVertexPositions(
+                boundView,
+                oldPositions,
+                newPositions,
+                selection,
+                selection
+        );
+        boundView.repaint();
     }
 
     private void applyEdgeWeightChange(Edge edge, Double weight) {
-        edge.setWeight(weight);
-        if (boundView != null) {
-            boundView.repaint();
+        if (boundView == null) {
+            return;
         }
-        onGraphModified.run();
+
+        double oldWeight = edge.getWeight();
+        graphEdits.setEdgeWeightLive(edge, weight);
+        SelectionSnapshot selection = SelectionSnapshot.from(boundView.getSelection());
+        graphEdits.recordEdgeWeight(
+                boundView,
+                edge,
+                oldWeight,
+                weight,
+                selection
+        );
+        boundView.repaint();
     }
 
     private void applyEdgeEndpointsChange(Edge edge, int[] sourceTargetIds) {
@@ -78,36 +107,48 @@ public class PropertiesPanelController {
             return;
         }
 
-        int sourceId = sourceTargetIds[0];
-        int targetId = sourceTargetIds[1];
-        if (edge.getSource().getId() == sourceId && edge.getTarget().getId() == targetId) {
-            return;
+        int oldSourceId = edge.getSource().getId();
+        int oldTargetId = edge.getTarget().getId();
+        GraphEditService.RewireResult result = graphEdits.rewireEdgeLive(
+                graph,
+                edge,
+                sourceTargetIds[0],
+                sourceTargetIds[1]
+        );
+        switch (result) {
+            case NO_CHANGE -> { }
+            case APPLIED -> {
+                SelectionSnapshot selectionBefore = SelectionSnapshot.from(boundView.getSelection());
+                SelectionSnapshot selectionAfter = new SelectionSnapshot(
+                        selectionBefore.vertexIds(),
+                        sourceTargetIds[0],
+                        sourceTargetIds[1]
+                );
+                graphEdits.recordEdgeRewire(
+                        boundView,
+                        edge,
+                        oldSourceId,
+                        oldTargetId,
+                        sourceTargetIds[0],
+                        sourceTargetIds[1],
+                        selectionBefore,
+                        selectionAfter
+                );
+                boundView.repaint();
+            }
+            case SOURCE_MISSING -> {
+                showError("Nie istnieje wierzchołek o ID: " + sourceTargetIds[0]);
+                view.getPropertiesPanel().showHighlight(boundView.getSelection());
+            }
+            case TARGET_MISSING -> {
+                showError("Nie istnieje wierzchołek o ID: " + sourceTargetIds[1]);
+                view.getPropertiesPanel().showHighlight(boundView.getSelection());
+            }
+            case DUPLICATE_EDGE -> {
+                showError("Krawędź między tymi wierzchołkami już istnieje.");
+                view.getPropertiesPanel().showHighlight(boundView.getSelection());
+            }
         }
-        if (edge.getSource().getId() == targetId && edge.getTarget().getId() == sourceId) {
-            return;
-        }
-
-        Vertex newSource = graph.getVertex(sourceId);
-        if (newSource == null) {
-            showError("Nie istnieje wierzchołek o ID: " + sourceId);
-            view.getPropertiesPanel().showHighlight(boundView.getSelection());
-            return;
-        }
-        Vertex newTarget = graph.getVertex(targetId);
-        if (newTarget == null) {
-            showError("Nie istnieje wierzchołek o ID: " + targetId);
-            view.getPropertiesPanel().showHighlight(boundView.getSelection());
-            return;
-        }
-        if (graph.hasEdgeBetween(newSource, newTarget, edge)) {
-            showError("Krawędź między tymi wierzchołkami już istnieje.");
-            view.getPropertiesPanel().showHighlight(boundView.getSelection());
-            return;
-        }
-
-        graph.rewireEdge(edge, newSource, newTarget);
-        boundView.repaint();
-        onGraphModified.run();
     }
 
     private void showError(String message) {

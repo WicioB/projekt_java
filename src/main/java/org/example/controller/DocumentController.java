@@ -1,8 +1,10 @@
 package org.example.controller;
 
 import org.example.model.graph.Graph;
+import org.example.service.edit.GraphEditService;
 import org.example.service.export.TextExporter;
 import org.example.service.export.TextImporter;
+import org.example.service.export.GraphLayoutTextFormat;
 import org.example.service.export.VisualExportOptions;
 import org.example.service.export.VisualExporter;
 import org.example.service.layout.GraphLayoutGenerator;
@@ -35,10 +37,12 @@ public class DocumentController {
     private final VisualExporter visualExporter = new VisualExporter();
     private final PropertiesPanelController propertiesPanelController;
     private final GraphController graphController;
+    private final HistoryController historyController;
     private final GraphView workspace;
 
     private File sourceGraphFile;
     private File savedGraphFile;
+    private String savedGraphSignature;
     private boolean loading;
     private boolean unsaved;
 
@@ -53,8 +57,10 @@ public class DocumentController {
         view.getSaveTextItem().addActionListener(this::saveTextFile);
         view.getSaveAsTextItem().addActionListener(this::saveTextFileAs);
         view.getExportItem().addActionListener(this::exportImage);
-        propertiesPanelController = new PropertiesPanelController(view, this::markUnsaved);
-        graphController = new GraphController(view, this::markUnsaved);
+        GraphEditService graphEditService = new GraphEditService(this::markUnsaved);
+        propertiesPanelController = new PropertiesPanelController(view, graphEditService);
+        graphController = new GraphController(view, graphEditService);
+        historyController = new HistoryController(view, this::markUnsaved);
         view.setWindowClosingHandler(_ -> confirmDiscardAndRun(this::exitApplication));
         updateControls();
     }
@@ -109,6 +115,7 @@ public class DocumentController {
                 },
                 _ -> {
                     savedGraphFile = fileToSave;
+                    captureSavedBaseline(graph);
                     setUnsaved(false);
                     updateControls();
                     if (showSuccessMessage) {
@@ -263,6 +270,8 @@ public class DocumentController {
     private void clearGraph() {
         sourceGraphFile = null;
         savedGraphFile = null;
+        savedGraphSignature = null;
+        clearEditHistories();
         workspace.clear();
         propertiesPanelController.clearSelection();
         setUnsaved(false);
@@ -273,6 +282,8 @@ public class DocumentController {
         view.setImportProgressStep("Rysowanie grafu");
         this.sourceGraphFile = sourceGraphFile;
         this.savedGraphFile = null;
+        this.savedGraphSignature = null;
+        clearEditHistories();
         workspace.showSingle(graph);
         setUnsaved(true);
         updateControls();
@@ -282,6 +293,8 @@ public class DocumentController {
         view.setImportProgressStep("Rysowanie grafu");
         this.sourceGraphFile = sourceGraphFile;
         this.savedGraphFile = null;
+        this.savedGraphSignature = null;
+        clearEditHistories();
         workspace.showCompare(left, right);
         setUnsaved(true);
         updateControls();
@@ -290,9 +303,27 @@ public class DocumentController {
     private void setGraphFromLayoutFile(Graph graph, File layoutFile) {
         this.sourceGraphFile = null;
         this.savedGraphFile = layoutFile;
+        captureSavedBaseline(graph);
+        clearEditHistories();
         workspace.showSingle(graph);
         setUnsaved(false);
         updateControls();
+    }
+
+    private void clearEditHistories() {
+        workspace.forEachView(view -> view.getEditHistory().clear());
+    }
+
+    private void captureSavedBaseline(Graph graph) {
+        savedGraphSignature = GraphLayoutTextFormat.format(graph);
+    }
+
+    private boolean isGraphInSavedState() {
+        if (savedGraphFile == null || savedGraphSignature == null) {
+            return false;
+        }
+        Graph graph = workspace.getActiveGraph();
+        return GraphLayoutTextFormat.matches(graph, savedGraphSignature);
     }
 
     private File defaultSaveFile() {
@@ -349,9 +380,14 @@ public class DocumentController {
     }
 
     private void markUnsaved() {
-        if (workspace.hasGraph() && !loading) {
-            setUnsaved(true);
+        if (!workspace.hasGraph() || loading) {
+            return;
         }
+        if (savedGraphFile == null) {
+            setUnsaved(true);
+            return;
+        }
+        setUnsaved(!isGraphInSavedState());
     }
 
     private void setUnsaved(boolean unsaved) {
@@ -408,6 +444,7 @@ public class DocumentController {
         view.getSaveAsTextItem().setEnabled(graphActionsEnabled);
         view.getExportItem().setEnabled(graphActionsEnabled);
         view.getToolPanel().setControlsEnabled(graphActionsEnabled);
+        historyController.setGraphActionsEnabled(graphActionsEnabled);
         propertiesPanelController.setControlsEnabled(graphActionsEnabled);
         graphController.setEditActionsEnabled(graphActionsEnabled);
     }

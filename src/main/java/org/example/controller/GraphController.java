@@ -3,12 +3,13 @@ package org.example.controller;
 import org.example.model.graph.Edge;
 import org.example.model.graph.Graph;
 import org.example.model.graph.Vertex;
+import org.example.service.edit.GraphEditService;
+import org.example.service.history.SelectionSnapshot;
+import org.example.service.history.VertexPositions;
 import org.example.view.GraphEditDialogs;
 import org.example.view.GraphPanel;
 import org.example.view.MainFrame;
-import org.example.view.interaction.EdgeHighlight;
 import org.example.view.interaction.GraphHighlight;
-import org.example.view.interaction.VerticesHighlight;
 import org.example.view.workspace.ActiveGraphView;
 import org.example.view.workspace.GraphPanelView;
 import org.example.view.workspace.GraphView;
@@ -19,15 +20,15 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
 public class GraphController {
     private final MainFrame view;
     private final GraphView workspace;
-    private final Runnable onGraphModified;
+    private final GraphEditService graphEdits;
 
     private ActiveGraphView boundView;
     private GraphPanel boundPanel;
@@ -36,6 +37,8 @@ public class GraphController {
     private final Consumer<GraphHighlight> onSelectionChanged = this::updateDeleteEnabled;
 
     private Set<Vertex> dragVertices = Set.of();
+    private Map<Integer, double[]> dragStartPositions = Map.of();
+    private SelectionSnapshot dragSelectionBefore = SelectionSnapshot.EMPTY;
     private Vertex rightPressVertex;
     private boolean rightButtonActive;
     private boolean vertexDragged;
@@ -43,10 +46,10 @@ public class GraphController {
     private int lastMouseX;
     private int lastMouseY;
 
-    public GraphController(MainFrame view, Runnable onGraphModified) {
+    public GraphController(MainFrame view, GraphEditService graphEdits) {
         this.view = view;
         this.workspace = view.getGraphView();
-        this.onGraphModified = onGraphModified;
+        this.graphEdits = graphEdits;
 
         view.getAddVertexItem().addActionListener(_ -> addVertex());
         view.getAddEdgeItem().addActionListener(_ -> addEdge());
@@ -110,6 +113,8 @@ public class GraphController {
             keyAdapter = null;
         }
         dragVertices = Set.of();
+        dragStartPositions = Map.of();
+        dragSelectionBefore = SelectionSnapshot.EMPTY;
         rightPressVertex = null;
         rightButtonActive = false;
         vertexDragged = false;
@@ -124,6 +129,7 @@ public class GraphController {
         }
 
         Set<Vertex> selectedVertices = activeView.getSelection().selectedVertices();
+        SelectionSnapshot selectionBefore = SelectionSnapshot.from(activeView.getSelection());
 
         GraphEditDialogs.VertexInput input = GraphEditDialogs.showAddVertex(
                 view,
@@ -137,17 +143,16 @@ public class GraphController {
         }
 
         try {
-            Vertex vertex = graph.addVertexAt(input.id(), input.x(), input.y());
-            if (input.connectToSelected()) {
-                for (Vertex selected : selectedVertices) {
-                    if (!graph.hasEdge(vertex, selected)) {
-                        graph.addEdge(vertex, selected, 1.0);
-                    }
-                }
-            }
+            Vertex vertex = graphEdits.addVertex(
+                    activeView,
+                    input.id(),
+                    input.x(),
+                    input.y(),
+                    input.connectToSelected() ? selectedVertices : Set.of(),
+                    selectionBefore
+            );
             activeView.selectVertex(vertex);
             activeView.repaint();
-            onGraphModified.run();
         } catch (IllegalArgumentException ex) {
             showError(ex.getMessage());
         }
@@ -180,13 +185,18 @@ public class GraphController {
             return;
         }
 
-        graph.addEdge(source, target, input.weight());
-        Edge addedEdge = graph.findEdge(source, target);
+        SelectionSnapshot selectionBefore = SelectionSnapshot.from(activeView.getSelection());
+        Edge addedEdge = graphEdits.addEdge(
+                activeView,
+                source,
+                target,
+                input.weight(),
+                selectionBefore
+        );
         if (addedEdge != null) {
             activeView.selectEdge(addedEdge);
         }
         activeView.repaint();
-        onGraphModified.run();
     }
 
     private void deleteSelection() {
@@ -201,19 +211,9 @@ public class GraphController {
             return;
         }
 
-        switch (selection) {
-            case EdgeHighlight edgeHighlight -> graph.removeEdge(edgeHighlight.edge());
-            case VerticesHighlight verticesHighlight -> {
-                for (Vertex vertex : new ArrayList<>(verticesHighlight.vertices())) {
-                    graph.removeVertex(vertex);
-                }
-            }
-            default -> { }
-        }
-
+        graphEdits.deleteSelection(activeView, selection);
         activeView.clearSelection();
         activeView.repaint();
-        onGraphModified.run();
     }
 
     private void updateDeleteEnabled(GraphHighlight highlight) {
@@ -251,6 +251,14 @@ public class GraphController {
                 }
                 panel.setDragVertices(dragVertices);
 
+                if (!dragVertices.isEmpty()) {
+                    dragStartPositions = VertexPositions.capture(dragVertices);
+                    dragSelectionBefore = SelectionSnapshot.from(panel.getSelection());
+                } else {
+                    dragStartPositions = Map.of();
+                    dragSelectionBefore = SelectionSnapshot.EMPTY;
+                }
+
                 if (dragVertices.isEmpty()) {
                     panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                 } else {
@@ -270,8 +278,17 @@ public class GraphController {
                 if (!isLeftMouseButton(e)) {
                     return;
                 }
-                if (vertexDragged) {
-                    onGraphModified.run();
+                if (vertexDragged && !dragVertices.isEmpty()) {
+                    ActiveGraphView activeView = workspace.getActiveView();
+                    if (activeView != null) {
+                        graphEdits.recordVertexDrag(
+                                activeView,
+                                dragVertices,
+                                dragStartPositions,
+                                dragSelectionBefore,
+                                SelectionSnapshot.from(panel.getSelection())
+                        );
+                    }
                 }
                 if (!dragVertices.isEmpty() && vertexDragged) {
                     if (dragVertices.size() == 1) {
@@ -294,6 +311,8 @@ public class GraphController {
                     }
                 }
                 dragVertices = Set.of();
+                dragStartPositions = Map.of();
+                dragSelectionBefore = SelectionSnapshot.EMPTY;
                 panel.setDragVertices(dragVertices);
                 vertexDragged = false;
                 panel.updateInteractionCursor();

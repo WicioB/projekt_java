@@ -150,4 +150,10 @@ public class SplitCompareGraphView extends JPanel implements GraphView {
     public void addActiveViewChangeListener(Consumer<ActiveGraphView> listener) {
         activeViewChangeListeners.add(listener);
     }
+
+    @Override
+    public void forEachView(Consumer<ActiveGraphView> consumer) {
+        consumer.accept(leftView);
+        consumer.accept(rightView);
+    }
 }

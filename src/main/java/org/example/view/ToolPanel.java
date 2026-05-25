@@ -4,11 +4,20 @@ import javax.swing.*;
 import java.awt.*;
 
 public class ToolPanel extends JPanel {
+    private static final Color ENABLED_BG = Color.WHITE;
+    private static final Color DISABLED_BG = new Color(204, 204, 204);
+
     private final JToggleButton showLabelsToggle;
     private final JToggleButton showWeightsToggle;
+    private final JButton undoButton;
+    private final JButton redoButton;
     private final JComboBox<String> zoomComboBox;
     private final JButton resetViewButton;
     private final JLabel positionLabel;
+
+    private boolean controlsEnabled;
+    private boolean undoAvailable;
+    private boolean redoAvailable;
 
     public ToolPanel() {
         setLayout(new BorderLayout());
@@ -19,24 +28,23 @@ public class ToolPanel extends JPanel {
 
         JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
 
-        showLabelsToggle = new JToggleButton();
-        showLabelsToggle.setIcon(new SvgIcon("/icons/label.svg", 20, 20));
-        showLabelsToggle.setToolTipText("Przełącz widoczność etykiet");
-        showLabelsToggle.setSelected(true);
-        styleButton(showLabelsToggle);
+        showLabelsToggle = createToggleButton("/icons/label.svg", "Przełącz widoczność etykiet", true);
         leftPanel.add(showLabelsToggle);
 
-        showWeightsToggle = new JToggleButton();
-        showWeightsToggle.setIcon(new SvgIcon("/icons/weight.svg", 20, 20));
-        showWeightsToggle.setToolTipText("Przełącz widoczność wag");
-        showWeightsToggle.setSelected(false);
-        styleButton(showWeightsToggle);
+        showWeightsToggle = createToggleButton("/icons/weight.svg", "Przełącz widoczność wag", false);
         leftPanel.add(showWeightsToggle);
 
-        resetViewButton = new JButton();
-        resetViewButton.setIcon(new SvgIcon("/icons/home.svg", 20, 20));
-        resetViewButton.setToolTipText("Resetuj widok");
-        styleButton(resetViewButton);
+        leftPanel.add(Box.createHorizontalStrut(10));
+
+        undoButton = createActionButton("/icons/undo.svg", "Cofnij");
+        undoButton.setEnabled(false);
+        leftPanel.add(undoButton);
+
+        redoButton = createActionButton("/icons/redo.svg", "Przywróć");
+        redoButton.setEnabled(false);
+        leftPanel.add(redoButton);
+
+        resetViewButton = createActionButton("/icons/home.svg", "Resetuj widok");
         leftPanel.add(resetViewButton);
 
         add(leftPanel, BorderLayout.WEST);
@@ -60,24 +68,43 @@ public class ToolPanel extends JPanel {
         setControlsEnabled(false);
     }
 
-    private void styleButton(AbstractButton btn) {
-        btn.setPreferredSize(new Dimension(32, 32));
-        btn.setFocusPainted(false);
-        btn.setMargin(new Insets(2, 2, 2, 2));
-        btn.setBackground(Color.WHITE);
+    private JToggleButton createToggleButton(String iconPath, String tooltip, boolean selected) {
+        JToggleButton button = new JToggleButton();
+        button.setIcon(new SvgIcon(iconPath, 20, 20));
+        button.setToolTipText(tooltip);
+        button.setSelected(selected);
+        styleToolbarButton(button);
+        return button;
+    }
 
-        if (btn instanceof JToggleButton toggle) {
-            toggle.addItemListener(e -> {
-                if (toggle.isSelected()) {
-                    toggle.setBackground(new Color(100, 150, 220)); // Accent color
-                } else {
-                    toggle.setBackground(Color.WHITE);
-                }
-            });
-            if (toggle.isSelected()) {
-                toggle.setBackground(new Color(100, 150, 220));
-            }
+    private JButton createActionButton(String iconPath, String tooltip) {
+        JButton button = new JButton();
+        button.setIcon(new SvgIcon(iconPath, 20, 20));
+        button.setToolTipText(tooltip);
+        styleToolbarButton(button);
+        return button;
+    }
+
+    private void styleToolbarButton(AbstractButton button) {
+        button.setPreferredSize(new Dimension(32, 32));
+        button.setMargin(new Insets(2, 2, 2, 2));
+
+        button.addChangeListener(_ -> applyToolbarButtonAppearance(button));
+
+        if (button instanceof JToggleButton toggle) {
+            toggle.addItemListener(_ -> applyToolbarButtonAppearance(toggle));
         }
+
+        applyToolbarButtonAppearance(button);
+    }
+
+    private void applyToolbarButtonAppearance(AbstractButton button) {
+        if (!button.isEnabled()) {
+            button.setBackground(DISABLED_BG);
+        } else {
+            button.setBackground(ENABLED_BG);
+        }
+        button.repaint();
     }
 
     public JToggleButton getShowLabelsToggle() {
@@ -86,6 +113,14 @@ public class ToolPanel extends JPanel {
 
     public JToggleButton getShowWeightsToggle() {
         return showWeightsToggle;
+    }
+
+    public JButton getUndoButton() {
+        return undoButton;
+    }
+
+    public JButton getRedoButton() {
+        return redoButton;
     }
 
     public JComboBox<String> getZoomComboBox() {
@@ -101,10 +136,27 @@ public class ToolPanel extends JPanel {
     }
 
     public void setControlsEnabled(boolean enabled) {
+        controlsEnabled = enabled;
         showLabelsToggle.setEnabled(enabled);
         showWeightsToggle.setEnabled(enabled);
         zoomComboBox.setEnabled(enabled);
         resetViewButton.setEnabled(enabled);
         positionLabel.setEnabled(enabled);
+        if (!enabled) {
+            undoAvailable = false;
+            redoAvailable = false;
+        }
+        updateUndoRedoButtons();
+    }
+
+    public void setHistoryAvailability(boolean canUndo, boolean canRedo) {
+        undoAvailable = canUndo;
+        redoAvailable = canRedo;
+        updateUndoRedoButtons();
+    }
+
+    private void updateUndoRedoButtons() {
+        undoButton.setEnabled(controlsEnabled && undoAvailable);
+        redoButton.setEnabled(controlsEnabled && redoAvailable);
     }
 }

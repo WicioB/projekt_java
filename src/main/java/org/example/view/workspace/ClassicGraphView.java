@@ -66,6 +66,11 @@ public class ClassicGraphView extends JPanel implements GraphView {
         activeViewChangeListeners.add(listener);
     }
 
+    @Override
+    public void forEachView(Consumer<ActiveGraphView> consumer) {
+        consumer.accept(activeView);
+    }
+
     private void notifyActiveViewChanged() {
         if (!hasGraph()) {
             return;

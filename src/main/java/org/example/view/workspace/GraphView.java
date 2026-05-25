@@ -15,4 +15,6 @@ public interface GraphView {
     void setLoading(boolean loading);
 
     void addActiveViewChangeListener(Consumer<ActiveGraphView> listener);
+
+    void forEachView(Consumer<ActiveGraphView> consumer);
 }

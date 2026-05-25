@@ -1,7 +1,9 @@
 package org.example.view.workspace;
 
 import org.example.model.graph.Edge;
+import org.example.model.graph.Graph;
 import org.example.model.graph.Vertex;
+import org.example.service.history.GraphEditHistory;
 import org.example.view.GraphPanel;
 import org.example.view.interaction.GraphHighlight;
 
@@ -10,10 +12,21 @@ import java.util.function.Consumer;
 public class GraphPanelView implements ActiveGraphView {
     private final GraphPanel panel;
     private final PaneSide paneSide;
+    private final GraphEditHistory editHistory = new GraphEditHistory();
 
     public GraphPanelView(GraphPanel panel, PaneSide paneSide) {
         this.panel = panel;
         this.paneSide = paneSide;
+    }
+
+    @Override
+    public Graph getGraph() {
+        return panel.getGraph();
+    }
+
+    @Override
+    public GraphEditHistory getEditHistory() {
+        return editHistory;
     }
 
     @Override
@@ -84,6 +97,11 @@ public class GraphPanelView implements ActiveGraphView {
     @Override
     public void selectEdge(Edge edge) {
         panel.selectEdge(edge);
+    }
+
+    @Override
+    public void applySelectionHighlight(GraphHighlight highlight) {
+        panel.applySelectionHighlight(highlight);
     }
 
     @Override

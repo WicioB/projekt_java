@@ -1,12 +1,17 @@
 package org.example.view.workspace;
 
 import org.example.model.graph.Edge;
+import org.example.model.graph.Graph;
 import org.example.model.graph.Vertex;
+import org.example.service.history.GraphEditHistory;
 import org.example.view.interaction.GraphHighlight;
 
 import java.util.function.Consumer;
 
 public interface ActiveGraphView {
+    Graph getGraph();
+
+    GraphEditHistory getEditHistory();
     PaneSide getPaneSide();
     boolean isShowLabels();
     boolean isShowWeights();
@@ -21,6 +26,7 @@ public interface ActiveGraphView {
     void clearSelection();
     void selectVertex(Vertex vertex);
     void selectEdge(Edge edge);
+    void applySelectionHighlight(GraphHighlight highlight);
     void addSelectionChangeListener(Consumer<GraphHighlight> listener);
     void removeSelectionChangeListener(Consumer<GraphHighlight> listener);
     void setZoomChangeListener(Runnable listener);
