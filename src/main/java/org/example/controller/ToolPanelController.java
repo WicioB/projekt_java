@@ -1,57 +1,115 @@
 package org.example.controller;
 
 import org.example.view.MainFrame;
+import org.example.view.workspace.ActiveGraphView;
+import org.example.view.workspace.GraphView;
 
 import java.util.Locale;
 
 public class ToolPanelController {
     private final MainFrame view;
-    private boolean isUpdatingCombo = false;
+    private final GraphView workspace;
+    private boolean isUpdatingCombo;
+    private ActiveGraphView boundView;
+    private Runnable zoomListener;
+    private Runnable panListener;
 
     public ToolPanelController(MainFrame view) {
         this.view = view;
-        initListeners();
+        this.workspace = view.getGraphView();
+        initToolbarActions();
+        workspace.addActiveViewChangeListener(this::rebindToolbar);
+        rebindToolbar(workspace.getActiveView());
     }
 
-    private void initListeners() {
+    private void initToolbarActions() {
         view.getToolPanel().getZoomComboBox().addActionListener(e -> {
-            if (isUpdatingCombo) return;
+            if (isUpdatingCombo || boundView == null) {
+                return;
+            }
             Object selected = view.getToolPanel().getZoomComboBox().getSelectedItem();
             if (selected != null) {
                 try {
                     String val = selected.toString().replace("%", "").trim();
                     double zoomVal = Double.parseDouble(val) / 100.0;
-                    view.getGraphPanel().setZoom(zoomVal);
+                    boundView.setZoom(zoomVal);
                 } catch (NumberFormatException ignored) {
                 }
             }
         });
 
         view.getToolPanel().getResetViewButton().addActionListener(e -> {
-            view.getGraphPanel().resetView();
-            view.getGraphPanel().repaint();
-        });
-
-        view.getGraphPanel().setZoomChangeListener(() -> {
-            int zoomPct = (int) Math.round(view.getGraphPanel().getZoom() * 100);
-            isUpdatingCombo = true;
-            view.getToolPanel().getZoomComboBox().setSelectedItem(zoomPct + "%");
-            isUpdatingCombo = false;
-        });
-
-        view.getGraphPanel().setPanChangeListener(() -> {
-            double gx = view.getGraphPanel().getViewCenterGraphX();
-            double gy = view.getGraphPanel().getViewCenterGraphY();
-            view.getToolPanel().getPositionLabel().setText(formatGraphCoordinates(gx, gy));
+            if (boundView != null) {
+                boundView.resetView();
+                boundView.repaint();
+            }
         });
 
         view.getToolPanel().getShowLabelsToggle().addActionListener(_ -> {
-            view.getGraphPanel().setShowLabels(view.getToolPanel().getShowLabelsToggle().isSelected());
+            if (boundView != null) {
+                boundView.setShowLabels(view.getToolPanel().getShowLabelsToggle().isSelected());
+            }
         });
 
         view.getToolPanel().getShowWeightsToggle().addActionListener(_ -> {
-            view.getGraphPanel().setShowWeights(view.getToolPanel().getShowWeightsToggle().isSelected());
+            if (boundView != null) {
+                boundView.setShowWeights(view.getToolPanel().getShowWeightsToggle().isSelected());
+            }
         });
+    }
+
+    private void rebindToolbar(ActiveGraphView activeView) {
+        detachViewListeners();
+        boundView = activeView;
+        if (boundView == null) {
+            return;
+        }
+        syncToolbarFrom(boundView);
+        attachViewListeners(boundView);
+    }
+
+    private void detachViewListeners() {
+        if (boundView == null) {
+            return;
+        }
+        boundView.setZoomChangeListener(null);
+        boundView.setPanChangeListener(null);
+    }
+
+    private void attachViewListeners(ActiveGraphView activeView) {
+        zoomListener = () -> {
+            if (activeView != boundView) {
+                return;
+            }
+            int zoomPct = (int) Math.round(activeView.getZoom() * 100);
+            isUpdatingCombo = true;
+            view.getToolPanel().getZoomComboBox().setSelectedItem(zoomPct + "%");
+            isUpdatingCombo = false;
+        };
+        panListener = () -> {
+            if (activeView != boundView) {
+                return;
+            }
+            double gx = activeView.getViewCenterGraphX();
+            double gy = activeView.getViewCenterGraphY();
+            view.getToolPanel().getPositionLabel().setText(formatGraphCoordinates(gx, gy));
+        };
+        activeView.setZoomChangeListener(zoomListener);
+        activeView.setPanChangeListener(panListener);
+    }
+
+    private void syncToolbarFrom(ActiveGraphView activeView) {
+        isUpdatingCombo = true;
+        int zoomPct = (int) Math.round(activeView.getZoom() * 100);
+        view.getToolPanel().getZoomComboBox().setSelectedItem(zoomPct + "%");
+        isUpdatingCombo = false;
+
+        view.getToolPanel().getShowLabelsToggle().setSelected(activeView.isShowLabels());
+        view.getToolPanel().getShowWeightsToggle().setSelected(activeView.isShowWeights());
+
+        double gx = activeView.getViewCenterGraphX();
+        double gy = activeView.getViewCenterGraphY();
+        view.getToolPanel().getPositionLabel().setText(formatGraphCoordinates(gx, gy));
     }
 
     private static String formatGraphCoordinates(double x, double y) {

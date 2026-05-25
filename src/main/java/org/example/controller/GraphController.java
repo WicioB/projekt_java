@@ -7,9 +7,12 @@ import org.example.service.export.VisualExportOptions;
 import org.example.service.export.VisualExporter;
 import org.example.service.layout.GraphLayoutGenerator;
 import org.example.view.ExportOptionsDialog;
+import org.example.view.LayoutAlgorithmDialog;
 import org.example.view.MainFrame;
 import org.example.view.util.BackgroundTasks;
 import org.example.view.util.FileChooserDialogs;
+import org.example.view.workspace.ActiveGraphView;
+import org.example.view.workspace.GraphView;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -25,12 +28,14 @@ public class GraphController {
         SAVE, DISCARD, CANCEL
     }
 
+    private record CompareGraphs(Graph fruchterman, Graph tutte) {}
+
     private final MainFrame view;
     private final GraphLayoutGenerator layoutGenerator;
     private final VisualExporter visualExporter = new VisualExporter();
     private final PropertiesPanelController propertiesPanelController;
+    private final GraphView workspace;
 
-    private Graph graph;
     private File sourceGraphFile;
     private File savedGraphFile;
     private boolean loading;
@@ -39,6 +44,7 @@ public class GraphController {
     public GraphController(MainFrame view, GraphLayoutGenerator layoutGenerator) {
         this.view = view;
         this.layoutGenerator = layoutGenerator;
+        this.workspace = view.getGraphView();
 
         view.getOpenTextItem().addActionListener(this::openGraphFromFile);
         view.getOpenLayoutItem().addActionListener(this::openLayoutFromFile);
@@ -46,7 +52,7 @@ public class GraphController {
         view.getSaveTextItem().addActionListener(this::saveTextFile);
         view.getSaveAsTextItem().addActionListener(this::saveTextFileAs);
         view.getExportItem().addActionListener(this::exportImage);
-        view.getGraphPanel().setGraphModifiedListener(this::markUnsaved);
+        workspace.addModifiedListener(this::markUnsaved);
         propertiesPanelController = new PropertiesPanelController(view, this::markUnsaved);
         view.setWindowClosingHandler(_ -> confirmDiscardAndRun(this::exitApplication));
         updateControls();
@@ -65,6 +71,7 @@ public class GraphController {
     }
 
     private void saveGraph(boolean chooseLocation, boolean showSuccessMessage, Runnable onSuccess) {
+        Graph graph = workspace.getActiveGraph();
         if (graph == null) {
             JOptionPane.showMessageDialog(view, "Brak grafu do zapisania.");
             return;
@@ -89,10 +96,10 @@ public class GraphController {
             fileToSave = savedGraphFile;
         }
 
-        saveGraphToFile(fileToSave, showSuccessMessage, onSuccess);
+        saveGraphToFile(graph, fileToSave, showSuccessMessage, onSuccess);
     }
 
-    private void saveGraphToFile(File fileToSave, boolean showSuccessMessage, Runnable onSuccess) {
+    private void saveGraphToFile(Graph graph, File fileToSave, boolean showSuccessMessage, Runnable onSuccess) {
         BackgroundTasks.run(
                 view,
                 () -> {
@@ -120,6 +127,7 @@ public class GraphController {
     }
 
     private void exportImage(ActionEvent e) {
+        Graph graph = workspace.getActiveGraph();
         if (graph == null) {
             JOptionPane.showMessageDialog(view, "Brak grafu do wyeksportowania.");
             return;
@@ -129,10 +137,11 @@ public class GraphController {
             return;
         }
 
+        ActiveGraphView activeView = workspace.getActiveView();
         VisualExportOptions options = ExportOptionsDialog.showAndGetOptions(
                 view,
-                view.getGraphPanel().isShowLabels(),
-                view.getGraphPanel().isShowWeights()
+                activeView.isShowLabels(),
+                activeView.isShowWeights()
         );
         if (options == null) {
             return;
@@ -179,7 +188,7 @@ public class GraphController {
     }
 
     private void closeGraph(ActionEvent e) {
-        if (graph == null) {
+        if (!workspace.hasGraph()) {
             return;
         }
         confirmDiscardAndRun(this::clearGraph);
@@ -192,23 +201,22 @@ public class GraphController {
         }
         File selectedFile = fileChoice.get();
 
-        String[] options = {"Algorytm Fruchtermana-Reingolda", "Twierdzenie Tutte'a"};
-        int algChoice = JOptionPane.showOptionDialog(view,
-                "Wybierz algorytm układu wierzchołków:",
-                "Wybór algorytmu",
-                JOptionPane.DEFAULT_OPTION,
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                options,
-                options[0]);
-
-        if (algChoice == JOptionPane.CLOSED_OPTION) {
+        LayoutAlgorithmDialog.Choice choice = LayoutAlgorithmDialog.show(view);
+        if (choice == null) {
             return;
         }
-        int algorithmId = algChoice + 1;
 
         setLoading(true);
         view.showImportProgress("Generowanie układu");
+
+        switch (choice) {
+            case FRUCHTERMAN -> generateSingleLayout(selectedFile, 1);
+            case TUTTE -> generateSingleLayout(selectedFile, 2);
+            case COMPARE_BOTH -> generateCompareLayouts(selectedFile);
+        }
+    }
+
+    private void generateSingleLayout(File selectedFile, int algorithmId) {
         BackgroundTasks.run(
                 view,
                 () -> layoutGenerator.generateLayout(
@@ -216,40 +224,72 @@ public class GraphController {
                         algorithmId,
                         step -> SwingUtilities.invokeLater(() -> view.setImportProgressStep(step))
                 ),
-                graph -> setGraph(graph, selectedFile),
+                graph -> setSingleGraph(graph, selectedFile),
                 "Błąd podczas generowania układu: ",
-                () -> {
-                    view.hideImportProgress();
-                    setLoading(false);
-                }
+                this::finishImport
         );
     }
 
+    private void generateCompareLayouts(File selectedFile) {
+        BackgroundTasks.run(
+                view,
+                () -> {
+                    Graph fruchterman = layoutGenerator.generateLayout(
+                            selectedFile,
+                            1,
+                            step -> SwingUtilities.invokeLater(() ->
+                                    view.setImportProgressStep("Fruchterman: " + step))
+                    );
+                    Graph tutte = layoutGenerator.generateLayout(
+                            selectedFile,
+                            2,
+                            step -> SwingUtilities.invokeLater(() ->
+                                    view.setImportProgressStep("Tutte: " + step))
+                    );
+                    return new CompareGraphs(fruchterman, tutte);
+                },
+                result -> setCompareGraphs(result.fruchterman(), result.tutte(), selectedFile),
+                "Błąd podczas generowania układu: ",
+                this::finishImport
+        );
+    }
+
+    private void finishImport() {
+        view.hideImportProgress();
+        setLoading(false);
+    }
+
     private void clearGraph() {
-        graph = null;
         sourceGraphFile = null;
         savedGraphFile = null;
-        view.getGraphPanel().setGraph(null);
+        workspace.clear();
         propertiesPanelController.clearSelection();
         setUnsaved(false);
         updateControls();
     }
 
-    private void setGraph(Graph graph, File sourceGraphFile) {
+    private void setSingleGraph(Graph graph, File sourceGraphFile) {
         view.setImportProgressStep("Rysowanie grafu");
-        this.graph = graph;
         this.sourceGraphFile = sourceGraphFile;
         this.savedGraphFile = null;
-        view.getGraphPanel().setGraph(graph);
+        workspace.showSingle(graph);
+        setUnsaved(true);
+        updateControls();
+    }
+
+    private void setCompareGraphs(Graph left, Graph right, File sourceGraphFile) {
+        view.setImportProgressStep("Rysowanie grafu");
+        this.sourceGraphFile = sourceGraphFile;
+        this.savedGraphFile = null;
+        workspace.showCompare(left, right);
         setUnsaved(true);
         updateControls();
     }
 
     private void setGraphFromLayoutFile(Graph graph, File layoutFile) {
-        this.graph = graph;
         this.sourceGraphFile = null;
         this.savedGraphFile = layoutFile;
-        view.getGraphPanel().setGraph(graph);
+        workspace.showSingle(graph);
         setUnsaved(false);
         updateControls();
     }
@@ -266,6 +306,7 @@ public class GraphController {
         if (dotIndex > 0) {
             baseName = baseName.substring(0, dotIndex);
         }
+        baseName = baseName + workspace.getActiveView().getPaneSide().saveFilenameSuffix();
         File parent = sourceGraphFile.getParentFile();
         if (parent == null) {
             parent = new File(".");
@@ -274,7 +315,7 @@ public class GraphController {
     }
 
     private String documentDisplayName() {
-        if (graph == null) {
+        if (!workspace.hasGraph()) {
             return null;
         }
         String fileName;
@@ -284,7 +325,18 @@ public class GraphController {
             File defaultSave = defaultSaveFile();
             fileName = defaultSave != null ? defaultSave.getName() : null;
         }
-        return fileName != null ? stripExtension(fileName) : null;
+        if (fileName == null) {
+            return workspace.isCompareMode() ? "porównanie" : null;
+        }
+        String name = stripExtension(fileName);
+        if (workspace.isCompareMode()) {
+            int dashIndex = name.lastIndexOf('-');
+            if (dashIndex > 0) {
+                name = name.substring(0, dashIndex);
+            }
+            return name + " (porównanie)";
+        }
+        return name;
     }
 
     private static String stripExtension(String fileName) {
@@ -296,7 +348,7 @@ public class GraphController {
     }
 
     private void markUnsaved() {
-        if (graph != null && !loading) {
+        if (workspace.hasGraph() && !loading) {
             setUnsaved(true);
         }
     }
@@ -342,12 +394,12 @@ public class GraphController {
 
     private void setLoading(boolean loading) {
         this.loading = loading;
-        view.getGraphPanel().setLoading(loading);
+        workspace.setLoading(loading);
         updateControls();
     }
 
     private void updateControls() {
-        boolean graphActionsEnabled = graph != null && !loading;
+        boolean graphActionsEnabled = workspace.hasGraph() && !loading;
         view.getOpenTextItem().setEnabled(!loading);
         view.getOpenLayoutItem().setEnabled(!loading);
         view.getCloseGraphItem().setEnabled(graphActionsEnabled);

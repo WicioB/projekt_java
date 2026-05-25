@@ -1,5 +1,8 @@
 package org.example.view;
 
+import org.example.view.workspace.GraphView;
+import org.example.view.workspace.GraphViewHost;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
@@ -9,7 +12,7 @@ import java.util.function.Consumer;
 public class MainFrame extends JFrame {
     private static final String BASE_TITLE = "Edytor Grafu";
 
-    private final GraphPanel graphPanel;
+    private final GraphViewHost graphView = new GraphViewHost();
     private final ToolPanel toolPanel;
     private final PropertiesPanel propertiesPanel;
     private final ImportProgressOverlay importProgressOverlay;
@@ -46,13 +49,12 @@ public class MainFrame extends JFrame {
         menuBar.add(fileMenu);
         setJMenuBar(menuBar);
 
-        graphPanel = new GraphPanel();
         toolPanel = new ToolPanel();
         propertiesPanel = new PropertiesPanel();
 
         setLayout(new BorderLayout());
         JPanel centerPanel = new JPanel(new BorderLayout());
-        centerPanel.add(graphPanel, BorderLayout.CENTER);
+        centerPanel.add(graphView, BorderLayout.CENTER);
         centerPanel.add(propertiesPanel, BorderLayout.EAST);
         add(centerPanel, BorderLayout.CENTER);
         add(toolPanel, BorderLayout.SOUTH);
@@ -75,8 +77,8 @@ public class MainFrame extends JFrame {
         getGlassPane().setVisible(false);
     }
 
-    public GraphPanel getGraphPanel() {
-        return graphPanel;
+    public GraphView getGraphView() {
+        return graphView;
     }
 
     public ToolPanel getToolPanel() {

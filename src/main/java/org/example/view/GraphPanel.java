@@ -100,6 +100,14 @@ public class GraphPanel extends JPanel {
                 && a.selectedEdge() == b.selectedEdge();
     }
 
+    public Graph getGraph() {
+        return graph;
+    }
+
+    public GraphHighlight getSelection() {
+        return selection;
+    }
+
     public void clearSelection() {
         applySelection(GraphHighlight.empty());
     }

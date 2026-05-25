@@ -9,7 +9,6 @@ import org.example.service.render.scene.SceneStyle;
 import org.example.service.render.scene.VertexDrawStyle;
 import org.example.service.render.viewport.RenderContext;
 
-import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.util.ArrayList;
