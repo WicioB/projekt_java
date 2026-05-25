@@ -6,6 +6,7 @@ import org.example.model.graph.Vertex;
 import java.io.*;
 import java.util.Locale;
 import java.util.Scanner;
+import java.util.function.Consumer;
 
 public class Z2LayoutGenerator implements GraphLayoutGenerator {
 
@@ -124,13 +125,15 @@ public class Z2LayoutGenerator implements GraphLayoutGenerator {
     }
 
     @Override
-    public Graph generateLayout(File edgesFile, int algorithm) throws Exception {
+    public Graph generateLayout(File edgesFile, int algorithm, Consumer<String> onStep) throws Exception {
         File exeFile = extractExecutable();
 
         File outFile = File.createTempFile("graph_out", ".txt");
 
         try {
+            onStep.accept("Generowanie układu");
             invokeExternalProgram(exeFile, edgesFile, outFile, algorithm);
+            onStep.accept("Wczytywanie grafu");
             return parseResults(edgesFile, outFile);
         } finally {
             if (!outFile.delete() && outFile.exists()) {

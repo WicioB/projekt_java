@@ -22,6 +22,7 @@ public class GraphPanel extends JPanel {
     private static final int MAX_NODE_RADIUS = 20;
 
     private Graph graph;
+    private boolean loading;
     private Viewport viewport = Viewport.defaults();
 
     private Vertex draggedVertex = null;
@@ -32,6 +33,16 @@ public class GraphPanel extends JPanel {
 
     private int getScaledNodeRadius() {
         return (int) Math.clamp(SceneStyle.DEFAULT_NODE_RADIUS * viewport.zoom(),  MIN_NODE_RADIUS, MAX_NODE_RADIUS);
+    }
+
+    private boolean cantInteract() {
+        return graph == null || loading;
+    }
+
+    private void clearInteractionState() {
+        draggedVertex = null;
+        hoveredVertex = null;
+        setCursor(Cursor.getDefaultCursor());
     }
 
     public GraphPanel() {
@@ -53,7 +64,7 @@ public class GraphPanel extends JPanel {
 
             @Override
             public void mousePressed(MouseEvent e) {
-                if (graph == null) return;
+                if (cantInteract()) return;
                 lastMouseX = e.getX();
                 lastMouseY = e.getY();
 
@@ -68,6 +79,7 @@ public class GraphPanel extends JPanel {
 
             @Override
             public void mouseReleased(MouseEvent e) {
+                if (cantInteract()) return;
                 draggedVertex = null;
                 if (hoveredVertex != null) {
                     setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -79,6 +91,7 @@ public class GraphPanel extends JPanel {
 
             @Override
             public void mouseDragged(MouseEvent e) {
+                if (cantInteract()) return;
                 int dx = e.getX() - lastMouseX;
                 int dy = e.getY() - lastMouseY;
                 if (draggedVertex != null) {
@@ -100,6 +113,7 @@ public class GraphPanel extends JPanel {
 
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
+                if (cantInteract()) return;
                 viewport = viewport.zoomedByWheelDelta(
                         e.getPreciseWheelRotation(),
                         e.getX(),
@@ -113,6 +127,7 @@ public class GraphPanel extends JPanel {
 
             @Override
             public void mouseMoved(MouseEvent e) {
+                if (cantInteract()) return;
                 Vertex found = vertexAt(e.getX(), e.getY());
                 if (found != hoveredVertex) {
                     hoveredVertex = found;
@@ -162,12 +177,28 @@ public class GraphPanel extends JPanel {
 
     public void setGraph(Graph graph) {
         this.graph = graph;
-        resetView();
-        recalculateFit();
+        clearInteractionState();
+        if (graph != null) {
+            applyResetView();
+            recalculateFit();
+        }
         repaint();
     }
 
+    public void setLoading(boolean loading) {
+        this.loading = loading;
+        if (loading) {
+            clearInteractionState();
+        }
+    }
+
     public void resetView() {
+        if (cantInteract()) return;
+        applyResetView();
+        repaint();
+    }
+
+    private void applyResetView() {
         viewport = viewport.resetCamera();
         if (zoomChangeListener != null) zoomChangeListener.run();
         if (panChangeListener != null) panChangeListener.run();
@@ -184,6 +215,7 @@ public class GraphPanel extends JPanel {
     }
 
     public void setZoom(double newZoom) {
+        if (cantInteract()) return;
         viewport = viewport.zoomedAt(newZoom, getWidth() / 2.0, getHeight() / 2.0);
         if (panChangeListener != null) panChangeListener.run();
         repaint();
@@ -194,6 +226,7 @@ public class GraphPanel extends JPanel {
     }
 
     public void setPanX(double panX) {
+        if (cantInteract()) return;
         viewport = viewport.withPan(panX, viewport.panY());
         repaint();
     }
@@ -203,6 +236,7 @@ public class GraphPanel extends JPanel {
     }
 
     public void setPanY(double panY) {
+        if (cantInteract()) return;
         viewport = viewport.withPan(viewport.panX(), panY);
         repaint();
     }

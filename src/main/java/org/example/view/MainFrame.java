@@ -6,6 +6,7 @@ import java.awt.*;
 public class MainFrame extends JFrame {
     private final GraphPanel graphPanel;
     private final ToolPanel toolPanel;
+    private final ImportProgressOverlay importProgressOverlay;
 
     private final JMenuItem openTextItem;
     private final JMenuItem saveTextItem;
@@ -19,7 +20,7 @@ public class MainFrame extends JFrame {
 
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("Plik");
-        openTextItem = new JMenuItem("Otwórz graf");
+        openTextItem = new JMenuItem("Importuj graf");
         fileMenu.add(openTextItem);
 
         JMenu saveMenu = new JMenu("Zapisz");
@@ -38,6 +39,23 @@ public class MainFrame extends JFrame {
         setLayout(new BorderLayout());
         add(graphPanel, BorderLayout.CENTER);
         add(toolPanel, BorderLayout.SOUTH);
+
+        importProgressOverlay = new ImportProgressOverlay();
+        setGlassPane(importProgressOverlay);
+        getGlassPane().setVisible(false);
+    }
+
+    public void showImportProgress(String step) {
+        importProgressOverlay.setStep(step);
+        getGlassPane().setVisible(true);
+    }
+
+    public void setImportProgressStep(String step) {
+        importProgressOverlay.setStep(step);
+    }
+
+    public void hideImportProgress() {
+        getGlassPane().setVisible(false);
     }
 
     public GraphPanel getGraphPanel() {

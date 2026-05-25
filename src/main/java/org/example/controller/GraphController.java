@@ -11,6 +11,7 @@ import org.example.view.util.BackgroundTasks;
 import org.example.view.util.FileChooserDialogs;
 
 import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.event.ActionEvent;
 import java.io.File;
@@ -112,16 +113,25 @@ public class GraphController {
         int algorithmId = algChoice + 1;
 
         setLoading(true);
+        view.showImportProgress("Generowanie układu");
         BackgroundTasks.run(
                 view,
-                () -> layoutGenerator.generateLayout(selectedFile, algorithmId),
+                () -> layoutGenerator.generateLayout(
+                        selectedFile,
+                        algorithmId,
+                        step -> SwingUtilities.invokeLater(() -> view.setImportProgressStep(step))
+                ),
                 this::setGraph,
                 "Błąd podczas generowania układu: ",
-                () -> setLoading(false)
+                () -> {
+                    view.hideImportProgress();
+                    setLoading(false);
+                }
         );
     }
 
     private void setGraph(Graph graph) {
+        view.setImportProgressStep("Rysowanie grafu");
         this.graph = graph;
         view.getGraphPanel().setGraph(graph);
         updateControls();
@@ -129,6 +139,7 @@ public class GraphController {
 
     private void setLoading(boolean loading) {
         this.loading = loading;
+        view.getGraphPanel().setLoading(loading);
         updateControls();
     }
 
