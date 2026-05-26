@@ -11,7 +11,8 @@ import java.awt.event.WindowEvent;
 import java.util.function.Consumer;
 
 public class MainFrame extends JFrame {
-    private static final String BASE_TITLE = "Edytor Grafu";
+    public static final String APPLICATION_NAME = "Edytor Grafu";
+    private static final String BASE_TITLE = APPLICATION_NAME;
 
     private final GraphViewHost graphView = new GraphViewHost();
     private final ToolPanel toolPanel;
@@ -27,6 +28,7 @@ public class MainFrame extends JFrame {
     private final JMenuItem addVertexItem;
     private final JMenuItem addEdgeItem;
     private final JMenuItem deleteItem;
+    private final JMenuItem aboutItem;
 
     public MainFrame() {
         setTitle(BASE_TITLE);
@@ -66,6 +68,12 @@ public class MainFrame extends JFrame {
         editMenu.add(addEdgeItem);
         editMenu.add(deleteItem);
         menuBar.add(editMenu);
+
+        JMenu helpMenu = new JMenu("Pomoc");
+        aboutItem = new JMenuItem("O programie");
+        aboutItem.addActionListener(_ -> AboutDialog.show(this));
+        helpMenu.add(aboutItem);
+        menuBar.add(helpMenu);
 
         setJMenuBar(menuBar);
 
@@ -161,5 +169,9 @@ public class MainFrame extends JFrame {
 
     public JMenuItem getDeleteItem() {
         return deleteItem;
+    }
+
+    public JMenuItem getAboutItem() {
+        return aboutItem;
     }
 }
