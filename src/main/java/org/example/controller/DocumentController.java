@@ -16,10 +16,17 @@ import org.example.view.util.FileChooserDialogs;
 import org.example.view.workspace.ActiveGraphView;
 import org.example.view.workspace.GraphView;
 
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
+import javax.swing.JComponent;
 import javax.swing.JOptionPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.Optional;
 
@@ -57,6 +64,7 @@ public class DocumentController {
         view.getSaveTextItem().addActionListener(this::saveTextFile);
         view.getSaveAsTextItem().addActionListener(this::saveTextFileAs);
         view.getExportItem().addActionListener(this::exportImage);
+        installKeyboardShortcuts();
         GraphEditService graphEditService = new GraphEditService(this::markUnsaved);
         propertiesPanelController = new PropertiesPanelController(view, graphEditService);
         graphController = new GraphController(view, graphEditService);
@@ -67,6 +75,23 @@ public class DocumentController {
 
     private void exitApplication() {
         System.exit(0);
+    }
+
+    private void installKeyboardShortcuts() {
+        InputMap inputMap = view.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = view.getRootPane().getActionMap();
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK), "save");
+        actionMap.put("save", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (view.getSaveTextItem().isEnabled()) {
+                    saveTextFile(e);
+                } else if (view.getSaveAsTextItem().isEnabled()) {
+                    saveTextFileAs(e);
+                }
+            }
+        });
     }
 
     private void saveTextFile(ActionEvent e) {

@@ -5,6 +5,7 @@ import org.example.view.workspace.GraphViewHost;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.function.Consumer;
@@ -39,6 +40,9 @@ public class MainFrame extends JFrame {
         openLayoutItem = new JMenuItem("Otwórz układ...");
         closeGraphItem = new JMenuItem("Zamknij graf");
         saveTextItem = new JMenuItem("Zapisz układ");
+        saveTextItem.setAccelerator(
+                KeyStroke.getKeyStroke(KeyEvent.VK_S, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx())
+        );
         saveAsTextItem = new JMenuItem("Zapisz układ jako...");
         exportItem = new JMenuItem("Wyeksportuj do...");
         fileMenu.add(openTextItem);
